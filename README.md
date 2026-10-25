@@ -75,6 +75,7 @@
 | 智谱 Coding Plan（`zhipu`） | 官方套餐 | — | **实时额度**（官方 `bigmodel.cn/api/monitor/usage/quota/limit`：5h/周 已用百分比 + 重置时间、MCP 月度次数；凭据缝 `ZHIPU_API_KEY`；国际站 z.ai 可用 `usageEndpoints` 换 URL） |
 | MiniMax Token Plan（`minimax`） | 官方套餐 | — | **实时额度**（官方 `minimaxi.com/v1/token_plan/remains`：5h/周 剩余百分比 + 重置时间；凭据缝 `MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`；国际站 minimax.io 可用 `usageEndpoints` 换 URL） |
 | ClinePass（`clinepass`） | 官方套餐 | — | **实时额度**（官方 `api.cline.bot/v1/users/me/plan/usage-limits`：300 分钟/周/月 已用百分比 + 重置时间；凭据缝 `CLINEPASS_API_KEY`） |
+| Command Code（`commandcode`） | 官方套餐（Go / GOAT / Pro / Max） | — | **实时额度，插件内无任何凭据**（未公开的 `api.commandcode.ai/alpha/billing/credits`）：Bifrost 用专用 `commandcode-billing` provider 块以自己的密钥抓取，`scripts/commandcode-usage.py` 再从请求日志取出各窗口 |
 | Google AI / Gemini CLI（`google-ai-sub`） | AI Pro $19.99/月 | AI Pro / Ultra 5x $99.99 / Ultra 20x $199.99 | 无公开用量接口，按官方每日上限（1,500 / 2,000 请求/天）展示 |
 
 ### 按量计费（Token 计划）— 自动带官方价
@@ -98,7 +99,7 @@
 
 内置适配器（`lib/providers/`，端点与鉴权 2026-08-25 核实）：
 
-- **额度类**（订阅制 Code 计划）：OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / 智谱 Coding Plan / MiniMax Token Plan / ClinePass —— 卡片直接展示**订阅商接口返回的额度值**：每个窗口 5h/周/月的**实际已用百分比**与**重置时间**，另附供应商特有额度（Codex 代码评审、Claude Opus/Design 周窗口、Copilot Premium/Chat 快照、智谱 MCP 月度次数）；
+- **额度类**（订阅制 Code 计划）：OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / 智谱 Coding Plan / MiniMax Token Plan / ClinePass / Command Code —— 卡片直接展示**订阅商接口返回的额度值**：每个窗口 5h/周/月的**实际已用百分比**与**重置时间**，另附供应商特有额度（Codex 代码评审、Claude Opus/Design 周窗口、Copilot Premium/Chat 快照、智谱 MCP 月度次数）；
 - **余额类**（按量 Token 计划）：DeepSeek / Moonshot —— 展示**真实账户余额**（钱包可用余额 + 充值/赠金拆分，随 $/¥ 切换自动换算）。
 
 凭据**只读**复用本机登录态与凭据缝：
@@ -109,6 +110,7 @@
 | OpenAI Codex | 本机 `~/.codex/auth.json` 登录态 |
 | Claude Code | 本机 `~/.claude/.credentials.json` 登录态 |
 | GitHub Copilot | `GH_TOKEN` / `GITHUB_TOKEN` / `gh` 配置 |
+| Command Code | 插件内无：密钥在 Bifrost，`scripts/commandcode-usage.py` 读取已抓取的用量载荷 |
 
 **余额卡自动出现**：只要凭据缝（`$DSH_HOME/.credentials.yaml`）配置了 `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY`，即使该 provider 未出现在会话日志中（例如经 OpenCode Go 网关使用），也会自动生成 token 计划卡展示真实账户余额。登录态缺失或接口失败时卡片显示原因并回退本地配额行。Codex/Claude/Copilot 为非公开/逆向接口（`chatgpt.com`、`api.anthropic.com`、`api.github.com`），随时可能变化，**失败不崩溃**。
 
@@ -229,6 +231,7 @@ dsh-spend/
 │   │   ├── quota-zhipu.js        # 智谱 Coding Plan 实时额度（官方端点）
 │   │   ├── quota-minimax.js      # MiniMax Token Plan 实时额度（官方端点）
 │   │   ├── quota-clinepass.js    # ClinePass 实时额度（官方端点）
+│   │   ├── quota-commandcode.js  # Command Code 额度（从 Bifrost 日志复制，无凭据）
 │   │   ├── balance-deepseek.js   # DeepSeek 账户余额（官方端点）
 │   │   └── balance-moonshot.js   # Moonshot 账户余额（官方端点）
 │   └── client.js         # 浏览器 bundle（手写 __ModuleLoader__ 格式）

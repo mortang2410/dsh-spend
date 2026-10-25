@@ -75,7 +75,7 @@
 | 智谱 Coding Plan（`zhipu`） | 官方套餐 | — | **实时额度**（官方 `bigmodel.cn/api/monitor/usage/quota/limit`：5h/周 已用百分比 + 重置时间、MCP 月度次数；凭据缝 `ZHIPU_API_KEY`；国际站 z.ai 可用 `usageEndpoints` 换 URL） |
 | MiniMax Token Plan（`minimax`） | 官方套餐 | — | **实时额度**（官方 `minimaxi.com/v1/token_plan/remains`：5h/周 剩余百分比 + 重置时间；凭据缝 `MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`；国际站 minimax.io 可用 `usageEndpoints` 换 URL） |
 | ClinePass（`clinepass`） | 官方套餐 | — | **实时额度**（官方 `api.cline.bot/v1/users/me/plan/usage-limits`：300 分钟/周/月 已用百分比 + 重置时间；凭据缝 `CLINEPASS_API_KEY`） |
-| Command Code（`commandcode`） | 官方套餐（Go / GOAT / Pro / Max） | — | **实时额度，插件内无任何凭据**（未公开的 `api.commandcode.ai/alpha/billing/credits`）：Bifrost 用专用 `commandcode-billing` provider 块以自己的密钥抓取，`scripts/commandcode-usage.py` 再从请求日志取出各窗口 |
+| Command Code（`commandcode`） | 官方套餐（Go / GOAT / Pro / Max） | — | **实时额度，插件内无任何凭据**（未公开的 `api.commandcode.ai/alpha/billing/credits`）：Bifrost 用专用 `commandcode-billing` provider 块以自己的密钥抓取，`scripts/commandcode-usage.py` 再从请求日志取出各窗口。5h/周直接来自载荷；月额度用 `池子 - credits.monthlyCredits` 计算，池子取自厂商公布的套餐表，按滚动上限识别（GOAT 14/35 → 70 credits） |
 | Google AI / Gemini CLI（`google-ai-sub`） | AI Pro $19.99/月 | AI Pro / Ultra 5x $99.99 / Ultra 20x $199.99 | 无公开用量接口，按官方每日上限（1,500 / 2,000 请求/天）展示 |
 
 ### 按量计费（Token 计划）— 自动带官方价

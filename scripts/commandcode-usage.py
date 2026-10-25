@@ -13,9 +13,10 @@ Prints one JSON object on stdout:
     {"windows": {"5h": {...}, "week": {...}, "month": {...}},
      "fetchedAt": "<ISO>", "rowTimestamp": "<UTC text>", "refreshed": true|false}
 
-Window rows are `{status, percent, resetsAt?}` where percent is how much of the
-cap is used. Exits non-zero with a message on stderr when it cannot produce a
-row.
+Window rows are `{status, percent, used?, cap?, resetsAt?}` where percent is how
+much of the cap is used and used/cap are the vendor's raw credit figures (the
+adapter reads the caps to identify the plan's monthly credit pool). Exits
+non-zero with a message on stderr when it cannot produce a row.
 """
 
 import argparse
@@ -151,6 +152,11 @@ def normalize(payload):
         if pct is None:
             continue
         entry = {"status": "ok", "percent": pct}
+        try:
+            entry["used"] = float(row.get("used"))
+            entry["cap"] = float(row.get("cap"))
+        except (TypeError, ValueError):
+            pass
         resets = iso_from_ms(row.get("resetAt"))
         if resets:
             entry["resetsAt"] = resets

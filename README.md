@@ -75,6 +75,7 @@
 | 智谱 Coding Plan（`zhipu`） | 官方套餐 | — | **实时额度**（官方 `bigmodel.cn/api/monitor/usage/quota/limit`：5h/周 已用百分比 + 重置时间、MCP 月度次数；凭据缝 `ZHIPU_API_KEY`；国际站 z.ai 可用 `usageEndpoints` 换 URL） |
 | MiniMax Token Plan（`minimax`） | 官方套餐 | — | **实时额度**（官方 `minimaxi.com/v1/token_plan/remains`：5h/周 剩余百分比 + 重置时间；凭据缝 `MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`；国际站 minimax.io 可用 `usageEndpoints` 换 URL） |
 | ClinePass（`clinepass`） | 官方套餐 | — | **实时额度**（官方 `api.cline.bot/v1/users/me/plan/usage-limits`：300 分钟/周/月 已用百分比 + 重置时间；凭据缝 `CLINEPASS_API_KEY`） |
+| Command Code（`commandcode`） | 官方套餐（Go / GOAT / Pro / Max） | — | **实时额度**（未公开的 `api.commandcode.ai/alpha/billing/credits` + `/alpha/usage/summary`，与官方 `cmd` CLI 的 `/usage` 是同一组只读调用：5h/周 的信用额度已用百分比 + 重置时间，以及月度信用余额；凭据缝 `COMMANDCODE_API_KEY`，兜底 `cmd login` 写下的 `~/.commandcode/auth.json`） |
 | Google AI / Gemini CLI（`google-ai-sub`） | AI Pro $19.99/月 | AI Pro / Ultra 5x $99.99 / Ultra 20x $199.99 | 无公开用量接口，按官方每日上限（1,500 / 2,000 请求/天）展示 |
 
 ### 按量计费（Token 计划）— 自动带官方价
@@ -98,7 +99,7 @@
 
 内置适配器（`lib/providers/`，端点与鉴权 2026-08-25 核实）：
 
-- **额度类**（订阅制 Code 计划）：OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / 智谱 Coding Plan / MiniMax Token Plan / ClinePass —— 卡片直接展示**订阅商接口返回的额度值**：每个窗口 5h/周/月的**实际已用百分比**与**重置时间**，另附供应商特有额度（Codex 代码评审、Claude Opus/Design 周窗口、Copilot Premium/Chat 快照、智谱 MCP 月度次数）；
+- **额度类**（订阅制 Code 计划）：OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / 智谱 Coding Plan / MiniMax Token Plan / ClinePass / Command Code —— 卡片直接展示**订阅商接口返回的额度值**：每个窗口 5h/周/月的**实际已用百分比**与**重置时间**，另附供应商特有额度（Codex 代码评审、Claude Opus/Design 周窗口、Copilot Premium/Chat 快照、智谱 MCP 月度次数）；
 - **余额类**（按量 Token 计划）：DeepSeek / Moonshot —— 展示**真实账户余额**（钱包可用余额 + 充值/赠金拆分，随 $/¥ 切换自动换算）。
 
 凭据**只读**复用本机登录态与凭据缝：
@@ -109,6 +110,7 @@
 | OpenAI Codex | 本机 `~/.codex/auth.json` 登录态 |
 | Claude Code | 本机 `~/.claude/.credentials.json` 登录态 |
 | GitHub Copilot | `GH_TOKEN` / `GITHUB_TOKEN` / `gh` 配置 |
+| Command Code | 凭据缝 `COMMANDCODE_API_KEY`，兜底本机 `~/.commandcode/auth.json`（`cmd login`） |
 
 **余额卡自动出现**：只要凭据缝（`$DSH_HOME/.credentials.yaml`）配置了 `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY`，即使该 provider 未出现在会话日志中（例如经 OpenCode Go 网关使用），也会自动生成 token 计划卡展示真实账户余额。登录态缺失或接口失败时卡片显示原因并回退本地配额行。Codex/Claude/Copilot 为非公开/逆向接口（`chatgpt.com`、`api.anthropic.com`、`api.github.com`），随时可能变化，**失败不崩溃**。
 
@@ -184,7 +186,7 @@ config:
       timeoutMs: 15000                           # 可选：超时毫秒
 ```
 
-> **实时额度/余额**：Code 计划按内置适配器（`lib/providers/`）直读订阅商接口——opencode-go（凭据缝 `OPENCODE_GO_API_KEY`）、openai-codex（本机 `~/.codex/auth.json`）、claude-sub（`~/.claude/.credentials.json`）、github-copilot（`GH_TOKEN`/`GITHUB_TOKEN`/`gh` 配置）、zhipu（`ZHIPU_API_KEY`）、minimax（`MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`）、clinepass（`CLINEPASS_API_KEY`）；卡片显示各窗口实际百分比与重置时间。Token 计划余额直读：deepseek（`DEEPSEEK_API_KEY`）、moonshot（`MOONSHOT_API_KEY`）。`usageEndpoints` 可覆盖内置地址/超时，或为自定义供应商走通用 Bearer-key 通道（`<PROVIDER>_API_KEY`）。仅当登录态缺失、超时或非 200 时回退本地配额行并提示原因。
+> **实时额度/余额**：Code 计划按内置适配器（`lib/providers/`）直读订阅商接口——opencode-go（凭据缝 `OPENCODE_GO_API_KEY`）、openai-codex（本机 `~/.codex/auth.json`）、claude-sub（`~/.claude/.credentials.json`）、github-copilot（`GH_TOKEN`/`GITHUB_TOKEN`/`gh` 配置）、zhipu（`ZHIPU_API_KEY`）、minimax（`MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`）、clinepass（`CLINEPASS_API_KEY`）、commandcode（`COMMANDCODE_API_KEY`，兜底 `~/.commandcode/auth.json`）；卡片显示各窗口实际百分比与重置时间。Token 计划余额直读：deepseek（`DEEPSEEK_API_KEY`）、moonshot（`MOONSHOT_API_KEY`）。`usageEndpoints` 可覆盖内置地址/超时，或为自定义供应商走通用 Bearer-key 通道（`<PROVIDER>_API_KEY`）。仅当登录态缺失、超时或非 200 时回退本地配额行并提示原因。
 
 > **计价行**可加可选 `provider` 字段做提供商精确匹配（如 `provider: openai-codex`），不带 provider 的行对任意提供商的同名模型生效；未匹配到任何行时回退 `defaultPricing`。Token Plan 的「剩余」= 配置的充值余额 − 累计已用费用；Code Plan 的「剩余」= 额度 − 周期内实际消耗。未配置 `plans` 的提供商不显示计划卡片（默认按 token 计费口径展示费用）。
 
@@ -229,6 +231,7 @@ dsh-spend/
 │   │   ├── quota-zhipu.js        # 智谱 Coding Plan 实时额度（官方端点）
 │   │   ├── quota-minimax.js      # MiniMax Token Plan 实时额度（官方端点）
 │   │   ├── quota-clinepass.js    # ClinePass 实时额度（官方端点）
+│   │   ├── quota-commandcode.js  # Command Code 实时额度（未公开的 alpha 计费端点）
 │   │   ├── balance-deepseek.js   # DeepSeek 账户余额（官方端点）
 │   │   └── balance-moonshot.js   # Moonshot 账户余额（官方端点）
 │   └── client.js         # 浏览器 bundle（手写 __ModuleLoader__ 格式）

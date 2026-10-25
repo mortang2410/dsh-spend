@@ -73,6 +73,7 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 | ZhipuAI Coding Plan (`zhipu`) | official plan | — | **Live quota** (official `bigmodel.cn/api/monitor/usage/quota/limit`: 5h/week percent + reset, MCP monthly counts; credential seam `ZHIPU_API_KEY`; international site z.ai via a `usageEndpoints` URL override) |
 | MiniMax Token Plan (`minimax`) | official plan | — | **Live quota** (official `minimaxi.com/v1/token_plan/remains`: 5h/week remaining percent + reset; credential seam `MINIMAX_API_KEY`, fallback `MINIMAX_CN_API_KEY`; international site minimax.io via a `usageEndpoints` URL override) |
 | ClinePass (`clinepass`) | official plan | — | **Live quota** (official `api.cline.bot/v1/users/me/plan/usage-limits`: 5h/weekly/monthly percent + reset; credential seam `CLINEPASS_API_KEY`) |
+| Command Code (`commandcode`) | official plan (Go / GOAT / Pro / Max) | — | **Live quota** (undocumented `api.commandcode.ai/alpha/billing/credits` + `/alpha/usage/summary` — the same read-only calls the official `cmd` CLI's `/usage` makes: 5h/week percent of the credit-dollar cap + reset, plus the monthly credit balance; credential seam `COMMANDCODE_API_KEY`, fallback `~/.commandcode/auth.json` written by `cmd login`) |
 | Google AI / Gemini CLI (`google-ai-sub`) | AI Pro $19.99/mo | AI Pro / Ultra 5x $99.99 / Ultra 20x $199.99 | no public usage endpoint; shows the official daily caps (1,500 / 2,000 req/day) |
 
 ### Pay-as-you-go (Token) plans — auto-priced with official rates
@@ -96,7 +97,7 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 
 Built-in adapters (`lib/providers/`, endpoints & auth verified 2026-08-25):
 
-- **Quota** (subscription Code plans): OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / ZhipuAI Coding Plan / MiniMax Token Plan / ClinePass — the plan card shows **the vendor's own reported values**: actual percent used per window (5h / week / month) plus the reset time, plus vendor-specific shares (Codex code review, Claude Opus/Design weekly windows, Copilot Premium/Chat snapshots, Zhipu MCP monthly counts);
+- **Quota** (subscription Code plans): OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / ZhipuAI Coding Plan / MiniMax Token Plan / ClinePass / Command Code — the plan card shows **the vendor's own reported values**: actual percent used per window (5h / week / month) plus the reset time, plus vendor-specific shares (Codex code review, Claude Opus/Design weekly windows, Copilot Premium/Chat snapshots, Zhipu MCP monthly counts);
 - **Balance** (Token plans): DeepSeek / Moonshot — **real account balance** (wallet available + top-up/granted split, converted automatically with the $/¥ switch).
 
 Credentials are reused read-only from local CLI logins and the credentials seam:
@@ -107,6 +108,7 @@ Credentials are reused read-only from local CLI logins and the credentials seam:
 | OpenAI Codex | local `~/.codex/auth.json` login |
 | Claude Code | local `~/.claude/.credentials.json` login |
 | GitHub Copilot | `GH_TOKEN` / `GITHUB_TOKEN` / `gh` config |
+| Command Code | credentials seam `COMMANDCODE_API_KEY`, fallback local `~/.commandcode/auth.json` (`cmd login`) |
 
 **Wallet cards appear automatically**: when the credentials seam (`$DSH_HOME/.credentials.yaml`) holds `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY`, a token-plan card is auto-created even when that provider never appears in the session logs (e.g. usage rides through a gateway), showing the real account balance. Missing login or endpoint failure shows the reason and falls back to the local quota rows. The Codex/Claude/Copilot endpoints (`chatgpt.com`, `api.anthropic.com`, `api.github.com`) are reverse-engineered and may change; failures never crash the widget.
 
@@ -182,7 +184,7 @@ config:
       timeoutMs: 15000                           # optional: fetch timeout
 ```
 
-> **Live provider quota & balance**: Code plans are read through the built-in adapters (`lib/providers/`) — opencode-go (credentials seam `OPENCODE_GO_API_KEY`), openai-codex (`~/.codex/auth.json`), claude-sub (`~/.claude/.credentials.json`), github-copilot (`GH_TOKEN`/`GITHUB_TOKEN`/`gh`), zhipu (`ZHIPU_API_KEY`), minimax (`MINIMAX_API_KEY`, fallback `MINIMAX_CN_API_KEY`), clinepass (`CLINEPASS_API_KEY`) — showing the vendor's per-window percent and reset time; token-plan balances come from deepseek (`DEEPSEEK_API_KEY`) and moonshot (`MOONSHOT_API_KEY`). `usageEndpoints` rows override the built-in URL/timeout or add a custom provider via the generic Bearer-key path (`<PROVIDER>_API_KEY`). Only when the login is missing or the endpoint fails (timeout, non-200) does the card fall back to the local quota rows, with the reason shown.
+> **Live provider quota & balance**: Code plans are read through the built-in adapters (`lib/providers/`) — opencode-go (credentials seam `OPENCODE_GO_API_KEY`), openai-codex (`~/.codex/auth.json`), claude-sub (`~/.claude/.credentials.json`), github-copilot (`GH_TOKEN`/`GITHUB_TOKEN`/`gh`), zhipu (`ZHIPU_API_KEY`), minimax (`MINIMAX_API_KEY`, fallback `MINIMAX_CN_API_KEY`), clinepass (`CLINEPASS_API_KEY`), commandcode (`COMMANDCODE_API_KEY`, fallback `~/.commandcode/auth.json`) — showing the vendor's per-window percent and reset time; token-plan balances come from deepseek (`DEEPSEEK_API_KEY`) and moonshot (`MOONSHOT_API_KEY`). `usageEndpoints` rows override the built-in URL/timeout or add a custom provider via the generic Bearer-key path (`<PROVIDER>_API_KEY`). Only when the login is missing or the endpoint fails (timeout, non-200) does the card fall back to the local quota rows, with the reason shown.
 
 > **Pricing rows** accept an optional `provider` field for exact provider matching (e.g. `provider: openai-codex`); rows without one apply to any provider serving that model; unmatched models fall back to `defaultPricing`. Token Plan "remaining" = configured prepaid balance − accumulated estimated cost; Code Plan "remaining" = quota − actual consumption in the period. Providers without a `plans` entry show no plan card (their cost is still shown in the by-provider table).
 
@@ -227,6 +229,7 @@ dsh-spend/
 │   │   ├── quota-zhipu.js        # ZhipuAI Coding Plan live quota (official endpoint)
 │   │   ├── quota-minimax.js      # MiniMax Token Plan live quota (official endpoint)
 │   │   ├── quota-clinepass.js    # ClinePass live quota (official endpoint)
+│   │   ├── quota-commandcode.js  # Command Code live quota (undocumented alpha billing routes)
 │   │   ├── balance-deepseek.js   # DeepSeek account balance (official endpoint)
 │   │   └── balance-moonshot.js   # Moonshot account balance (official endpoint)
 │   └── client.js         # browser bundle (hand-written __ModuleLoader__ format)

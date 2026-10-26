@@ -71,7 +71,7 @@
 | OpenCode Go（`opencode-go`） | $10/月 | — | **实时额度**（官方 `GET /zen/go/v1/usage`：5h/周/月 实际已用百分比 + 重置时间）；接口不可用时回退周 $30（V4 Flash 约 79,050 请求/周） |
 | OpenAI Codex（`openai-codex`） | Plus $20/月 | Plus / Pro 5x $100 / Pro 20x $200 / Business | **实时额度**（`chatgpt.com/backend-api/wham/usage`，需本机 `~/.codex/auth.json` 登录态；未登录回退 ~100 请求/周） |
 | GitHub Copilot（`github-copilot`） | Pro $10/月 | Free / Pro / Pro+ $39 / Max $100 / Business / Enterprise | **实时额度**（`api.github.com/copilot_internal/user`，需 `GH_TOKEN`/`GITHUB_TOKEN` 或 `gh auth login`；未登录回退 AI Credits 月 $15） |
-| Claude Code（`claude-sub`） | Pro $20/月 | Pro / Max 5x $100 / Max 20x $200 | **实时额度**（`api.anthropic.com/api/oauth/usage`，需本机 `~/.claude/.credentials.json` 登录态；未登录回退档位表 5h 1x/5x/20x） |
+| Claude Code（`claude-sub`） | Pro $20/月 | Pro / Max 5x $100 / Max 20x $200 | **实时额度**（`api.anthropic.com/api/oauth/usage`，需本机 `~/.claude/.credentials.json` 登录态；未登录回退档位表 5h 1x/5x/20x）。该接口限流很紧，适配器最多每 5 分钟请求一次，遇到 HTTP 429 直接返回上一次的载荷 |
 | 智谱 Coding Plan（`zhipu`） | 官方套餐 | — | **实时额度**（官方 `bigmodel.cn/api/monitor/usage/quota/limit`：5h/周 已用百分比 + 重置时间、MCP 月度次数；凭据缝 `ZHIPU_API_KEY`；国际站 z.ai 可用 `usageEndpoints` 换 URL） |
 | MiniMax Token Plan（`minimax`） | 官方套餐 | — | **实时额度**（官方 `minimaxi.com/v1/token_plan/remains`：5h/周 剩余百分比 + 重置时间；凭据缝 `MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`；国际站 minimax.io 可用 `usageEndpoints` 换 URL） |
 | ClinePass（`clinepass`） | 官方套餐 | — | **实时额度**（官方 `api.cline.bot/v1/users/me/plan/usage-limits`：300 分钟/周/月 已用百分比 + 重置时间；凭据缝 `CLINEPASS_API_KEY`） |

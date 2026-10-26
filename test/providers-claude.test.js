@@ -101,6 +101,21 @@ test("surfaces the throttle when nothing is cached yet", async () => {
   }
 });
 
+test("backs off after a throttle instead of hammering the endpoint", async () => {
+  const h = harness(() => response(429, { error: { type: "rate_limit_error" } }));
+  try {
+    await assert.rejects(() => claudeFetch(io, null), /rate limited/);
+    h.advance(1_000);
+    await assert.rejects(() => claudeFetch(io, null), /rate limited/);
+    assert.equal(h.calls.length, 1);
+    h.advance(2 * 60 * 1000);
+    await assert.rejects(() => claudeFetch(io, null), /rate limited/);
+    assert.equal(h.calls.length, 2);
+  } finally {
+    h.restore();
+  }
+});
+
 test("a non-throttle failure still surfaces instead of replaying stale data", async () => {
   const h = harness((n) => (n === 1 ? response(200, usageBody()) : response(500, { error: "boom" })));
   try {

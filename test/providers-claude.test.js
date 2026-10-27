@@ -126,3 +126,37 @@ test("a non-throttle failure still surfaces instead of replaying stale data", as
     h.restore();
   }
 });
+
+test("an expired access token makes no request at all", async () => {
+  // Harness clock starts at 1_000_000; expiresAt below it means stale.
+  const stale = JSON.stringify({ claudeAiOauth: { accessToken: "token-old", refreshToken: "refresh-old", expiresAt: 900_000 } });
+  const staleIo = { env: {}, home: "/home/tester", readText: async (path) => (path.endsWith(".credentials.json") ? stale : undefined) };
+  const h = harness(() => response(200, usageBody()));
+  try {
+    await assert.rejects(() => claudeFetch(staleIo, null), (error) => {
+      assert.equal(error.code, "NOT_LOGGED_IN");
+      assert.match(error.message, /expired/i);
+      return true;
+    });
+    assert.equal(h.calls.length, 0);
+  } finally {
+    h.restore();
+  }
+});
+
+test("a rejected token surfaces without renewing the shared login", async () => {
+  // The saved login belongs to Claude Code. Renewing it here rotates the
+  // refresh token, and a discarded new pair leaves Claude Code's next renewal
+  // rejected, which clears the login.
+  const h = harness(() => response(401, { error: { type: "authentication_error" } }));
+  try {
+    await assert.rejects(() => claudeFetch(io, null), (error) => {
+      assert.equal(error.code, "AUTH");
+      return true;
+    });
+    assert.equal(h.calls.length, 1);
+    assert.match(h.calls[0].url, /api\/oauth\/usage$/);
+  } finally {
+    h.restore();
+  }
+});

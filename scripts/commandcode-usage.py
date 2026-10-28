@@ -8,6 +8,11 @@ override points at the billing URL), and it stores the response body in its log
 database. This script copies the numbers out of that log. It never sees a key
 and never calls the provider itself.
 
+A refresh that fails (Bifrost's own 504 timeout, a cancelled fetch) still
+commits a row, just without a body, so the newest row is not always usable:
+the newest row that carries a payload wins, and the card keeps showing the last
+good numbers while the vendor's route is flaky.
+
 Prints one JSON object on stdout:
 
     {"windows": {"5h": {...}, "week": {...}, "month": {...}},
@@ -39,24 +44,30 @@ def parse_args():
     p.add_argument("--provider", default=DEFAULT_PROVIDER, help="provider block that fetched the usage")
     p.add_argument("--gateway", default=DEFAULT_GATEWAY, help="Bifrost base URL, for the refresh poke")
     p.add_argument("--stale-seconds", type=int, default=300,
-                   help="skip the refresh poke when the newest row is younger than this")
+                   help="skip the refresh poke when the newest payload row is younger than this")
     p.add_argument("--timeout", type=float, default=20.0, help="refresh poke timeout")
     return p.parse_args()
 
 
-def newest_row(db_path, provider):
-    """Newest (timestamp, status, body) for one provider, or None."""
+def recent_rows(db_path, provider, limit=40):
+    """Newest (timestamp, status, body) rows for one provider, newest first."""
     uri = f"file:{db_path}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, timeout=5)
     try:
         cur = conn.execute(
             "select timestamp, status, raw_response from logs "
-            "where provider = ? order by timestamp desc limit 1",
-            (provider,),
+            "where provider = ? order by timestamp desc limit ?",
+            (provider, limit),
         )
-        return cur.fetchone()
+        return cur.fetchall()
     finally:
         conn.close()
+
+
+def newest_row(db_path, provider):
+    """Newest (timestamp, status, body) for one provider, or None."""
+    rows = recent_rows(db_path, provider, 1)
+    return rows[0] if rows else None
 
 
 def row_age_seconds(timestamp_text):
@@ -82,17 +93,6 @@ def poke_gateway(base_url, timeout):
             response.read(1024)
     except Exception as error:  # the poke is best effort; the row may be fresh enough
         print(f"refresh poke failed: {error}", file=sys.stderr)
-
-
-def newest_row_after(db_path, provider, previous_timestamp, attempts=12, delay=0.25):
-    """Wait briefly for Bifrost to commit the row its fetch just produced."""
-    last = None
-    for _ in range(attempts):
-        last = newest_row(db_path, provider)
-        if last is not None and last[0] != previous_timestamp:
-            return last
-        time.sleep(delay)
-    return last
 
 
 def payload_from_body(body):
@@ -122,6 +122,31 @@ def payload_from_body(body):
             except ValueError:
                 continue
     return None
+
+
+def newest_payload_row(rows):
+    """Newest row that carries a billing payload, as `(row, payload)`.
+
+    A failed refresh still writes a row, but with no body (Bifrost's own 504
+    timeout, or a cancelled fetch), so the newest row is not necessarily the
+    newest usable one. Falling back to the last good row keeps the card showing
+    real numbers while the vendor's route is flaky.
+    """
+    for row in rows:
+        payload = payload_from_body(row[2])
+        if payload is not None:
+            return row, payload
+    return None, None
+
+
+def newest_payload_after(db_path, provider, previous_timestamp, attempts=12, delay=0.25):
+    """Wait briefly for Bifrost to commit a payload row newer than the shown one."""
+    for _ in range(attempts):
+        row, payload = newest_payload_row(recent_rows(db_path, provider))
+        if payload is not None and (previous_timestamp is None or row[0] != previous_timestamp):
+            return row, payload
+        time.sleep(delay)
+    return newest_payload_row(recent_rows(db_path, provider))
 
 
 def iso_from_ms(value):
@@ -175,24 +200,24 @@ def normalize(payload):
 def main():
     args = parse_args()
     db_path = str(Path(args.db).expanduser())
-    row = newest_row(db_path, args.provider)
-    age = row_age_seconds(row[0]) if row else None
+    row, payload = newest_payload_row(recent_rows(db_path, args.provider))
+    age = row_age_seconds(row[0]) if row is not None else None
     refreshed = False
-    if row is None or age is None or age > args.stale_seconds:
-        previous = row[0] if row else None
+    if payload is None or age is None or age > args.stale_seconds:
+        previous = row[0] if row is not None else None
         poke_gateway(args.gateway, args.timeout)
         refreshed = True
-        row = newest_row_after(db_path, args.provider, previous)
-    if row is None:
-        print(f"no '{args.provider}' row in {db_path}; is the Bifrost provider block configured and Bifrost running?",
-              file=sys.stderr)
-        return 1
-    timestamp, status, body = row
-    payload = payload_from_body(body)
+        row, payload = newest_payload_after(db_path, args.provider, previous)
     if payload is None:
-        print(f"row {timestamp} status={status} holds no usage payload (capture disabled or body trimmed)",
-              file=sys.stderr)
+        newest = newest_row(db_path, args.provider)
+        if newest is None:
+            print(f"no '{args.provider}' row in {db_path}; is the Bifrost provider block configured and Bifrost running?",
+                  file=sys.stderr)
+        else:
+            print(f"rows for '{args.provider}' hold no usage payload (newest {newest[0]} status={newest[1]}); "
+                  "capture disabled, body trimmed, or every recent billing fetch failed", file=sys.stderr)
         return 1
+    timestamp, status = row[0], row[1]
     result = normalize(payload)
     if not result["windows"]:
         print(f"row {timestamp} status={status} has no usable windows", file=sys.stderr)

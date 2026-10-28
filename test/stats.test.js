@@ -9,7 +9,7 @@ import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zstdCompressSync } from "node:zlib";
-import { buildStats, scanSessions } from "../lib/stats.js";
+import { buildStats, computeSignature, scanSessions } from "../lib/stats.js";
 
 const now = Date.now();
 const Flash = {
@@ -151,6 +151,51 @@ test("scanSessions streams zstd frames and reuses unchanged durable files", asyn
     assert.equal(live.decodeErrors, 0);
     assert.equal(live.calls.length, 1);
     assert.equal(live.calls[0].outputTokens, 4);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("scanSessions reads every session-format generation and prefers the current one", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dsh-spend-format-"));
+  const now = Date.now();
+  const logFrame = (id, outputTokens) => zstdCompressSync(Buffer.from(`${[
+    { type: "session", id, cwd: "/workspace", createdAt: now },
+    { type: "request/header", data: { header: { config: { provider: "bifrost", model: "commandcode/deepseek-goat" } } } },
+    { type: "step/start", data: { turn: 0, step: 0 } },
+    { type: "assistant/message", data: { turn: 0, step: 0, usage: { outputTokens } } },
+  ].map((event) => JSON.stringify(event)).join("\n")}\n`));
+  const currentFile = join(root, "workspace", "current", "session.v4.jsonl.zstd");
+  const legacyFile = join(root, "workspace", "legacy", "session.jsonl.zstd");
+  const bothDir = join(root, "workspace", "both");
+
+  try {
+    await mkdir(join(root, "workspace", "current"), { recursive: true });
+    await mkdir(join(root, "workspace", "legacy"), { recursive: true });
+    await mkdir(bothDir, { recursive: true });
+    // The store DSH writes today: generation four carries the `vN` component.
+    await writeFile(currentFile, logFrame("current", 2));
+    // Generation zero keeps the suffix-only name; existing history must survive.
+    await writeFile(legacyFile, logFrame("legacy", 3));
+    // A directory that somehow holds both generations yields the current one only.
+    await writeFile(join(bothDir, "session.jsonl.zstd"), logFrame("both", 4));
+    await writeFile(join(bothDir, "session.v4.jsonl.zstd"), logFrame("both", 5));
+
+    const scanned = await scanSessions(root, []);
+    assert.equal(scanned.totalSessions, 3);
+    assert.equal(scanned.decodeErrors, 0);
+    assert.deepEqual(
+      scanned.calls.map((call) => [call.sessionId, call.outputTokens]).sort(),
+      [["both", 5], ["current", 2], ["legacy", 3]],
+    );
+
+    // Fingerprint must track the current generation too: a rewrite of the
+    // generation-four file has to invalidate the cached snapshot.
+    const before = await computeSignature(root, []);
+    await writeFile(currentFile, logFrame("current", 6));
+    const touchedAt = new Date(Date.now() + 2000);
+    await utimes(currentFile, touchedAt, touchedAt);
+    assert.notEqual(await computeSignature(root, []), before);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -160,3 +160,63 @@ test("a rejected token surfaces without renewing the shared login", async () => 
     h.restore();
   }
 });
+
+test("a lapsed token is handed back to Claude Code, which renews it", async () => {
+  // The adapter never posts to the token endpoint: it runs `claude auth
+  // status`, the CLI renews under its own lock, and the file is re-read.
+  const state = {
+    text: JSON.stringify({ claudeAiOauth: { accessToken: "token-old", refreshToken: "refresh-old", expiresAt: 900_000 } }),
+  };
+  const runs = [];
+  const nudgeIo = {
+    env: {},
+    home: "/home/tester",
+    readText: async (path) => (path.endsWith(".credentials.json") ? state.text : undefined),
+    run: async (file, args) => {
+      runs.push({ file, args });
+      state.text = JSON.stringify({ claudeAiOauth: { accessToken: "token-new", refreshToken: "refresh-new", expiresAt: 9_000_000 } });
+      return { code: 0 };
+    },
+  };
+  const h = harness(() => response(200, usageBody()));
+  try {
+    const usage = await claudeFetch(nudgeIo, null);
+    assert.equal(runs.length, 1);
+    assert.deepEqual(runs[0].args, ["auth", "status"]);
+    assert.match(runs[0].file, /claude$/);
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0].options.headers.Authorization, "Bearer token-new");
+    assert.equal(usage.windows["5h"].percent, 12);
+  } finally {
+    h.restore();
+  }
+});
+
+test("a CLI that cannot renew is not asked again on every poll", async () => {
+  const state = {
+    text: JSON.stringify({ claudeAiOauth: { accessToken: "token-old", refreshToken: "refresh-old", expiresAt: 900_000 } }),
+  };
+  const runs = [];
+  const nudgeIo = {
+    env: {},
+    home: "/home/tester",
+    readText: async (path) => (path.endsWith(".credentials.json") ? state.text : undefined),
+    run: async (file, args) => {
+      runs.push({ file, args });
+      return { code: 0 };
+    },
+  };
+  const h = harness(() => response(200, usageBody()));
+  try {
+    await assert.rejects(() => claudeFetch(nudgeIo, null), (error) => error.code === "NOT_LOGGED_IN");
+    h.advance(30_000);
+    await assert.rejects(() => claudeFetch(nudgeIo, null), (error) => error.code === "NOT_LOGGED_IN");
+    assert.equal(runs.length, 1);
+    h.advance(10 * 60 * 1000);
+    await assert.rejects(() => claudeFetch(nudgeIo, null), (error) => error.code === "NOT_LOGGED_IN");
+    assert.equal(runs.length, 2);
+    assert.equal(h.calls.length, 0);
+  } finally {
+    h.restore();
+  }
+});

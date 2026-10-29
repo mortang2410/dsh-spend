@@ -1,14 +1,14 @@
 /**
  * Codex adapter tests: the saved OAuth pair belongs to the Codex CLI, so the
- * adapter reads `~/.codex/auth.json` and never renews it. Renewing here would
- * rotate the pair out of the CLI's hands (same defect class as the Claude
- * Code adapter).
+ * adapter reads `~/.codex/auth.json` and never posts to the token endpoint.
+ * A lapsed access token is handed back to the CLI (`codex doctor`), which
+ * renews under its own process (same rule as the Claude Code adapter).
  *
  * Network and clock are stubbed; no credential value leaves this file.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { codexFetch } from "../lib/providers/oauth-codex.js";
+import { codexFetch, resetCodexOwnerCheck } from "../lib/providers/oauth-codex.js";
 
 /** Unsigned JWT-shaped token carrying only the `exp` claim the adapter reads. */
 function tokenExpiringAt(unixSeconds) {
@@ -57,6 +57,7 @@ function harness(responder) {
     restore() {
       Date.now = realNow;
       globalThis.fetch = realFetch;
+      resetCodexOwnerCheck();
     },
   };
 }
@@ -124,6 +125,84 @@ test("an opaque token without an exp claim is decided by the endpoint", async ()
     const usage = await codexFetch(ioFor(opaque), null);
     assert.equal(h.calls.length, 1);
     assert.equal(usage.windows["5h"].percent, 25);
+  } finally {
+    h.restore();
+  }
+});
+
+test("a fresh token never spawns the CLI", async () => {
+  const runs = [];
+  const io = {
+    env: {},
+    home: "/home/tester",
+    readText: async (path) => (path.endsWith("auth.json") ? credentials(2_000) : undefined),
+    run: async (file, args) => {
+      runs.push({ file, args });
+      return { code: 0 };
+    },
+  };
+  const h = harness(() => response(200, usageBody()));
+  try {
+    await codexFetch(io, null);
+    assert.equal(runs.length, 0);
+    assert.equal(h.calls.length, 1);
+  } finally {
+    h.restore();
+  }
+});
+
+test("a lapsed token is handed back to the Codex CLI, which renews it", async () => {
+  // The adapter never posts to the token endpoint: it runs the CLI's own
+  // diagnostic, the CLI rotates the pair into `auth.json`, and the file is
+  // re-read.
+  const state = { text: credentials(900) };
+  const runs = [];
+  const nudgeIo = {
+    env: {},
+    home: "/home/tester",
+    readText: async (path) => (path.endsWith("auth.json") ? state.text : undefined),
+    run: async (file, args) => {
+      runs.push({ file, args });
+      state.text = credentials(2_000);
+      return { code: 0 };
+    },
+  };
+  const h = harness(() => response(200, usageBody()));
+  try {
+    const usage = await codexFetch(nudgeIo, null);
+    assert.equal(runs.length, 1);
+    assert.deepEqual(runs[0].args, ["doctor", "--summary", "--no-color"]);
+    assert.match(runs[0].file, /codex$/);
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0].options.headers.Authorization, `Bearer ${JSON.parse(state.text).tokens.access_token}`);
+    assert.equal(usage.windows["5h"].percent, 25);
+  } finally {
+    h.restore();
+  }
+});
+
+test("a CLI that cannot renew is not asked again on every poll", async () => {
+  const state = { text: credentials(900) };
+  const runs = [];
+  const nudgeIo = {
+    env: {},
+    home: "/home/tester",
+    readText: async (path) => (path.endsWith("auth.json") ? state.text : undefined),
+    run: async (file, args) => {
+      runs.push({ file, args });
+      return { code: 0 };
+    },
+  };
+  const h = harness(() => response(200, usageBody()));
+  try {
+    await assert.rejects(() => codexFetch(nudgeIo, null), (error) => error.code === "NOT_LOGGED_IN" && /expired/i.test(error.message));
+    h.advance(30_000);
+    await assert.rejects(() => codexFetch(nudgeIo, null), (error) => error.code === "NOT_LOGGED_IN");
+    assert.equal(runs.length, 1);
+    h.advance(10 * 60 * 1000);
+    await assert.rejects(() => codexFetch(nudgeIo, null), (error) => error.code === "NOT_LOGGED_IN");
+    assert.equal(runs.length, 2);
+    assert.equal(h.calls.length, 0);
   } finally {
     h.restore();
   }

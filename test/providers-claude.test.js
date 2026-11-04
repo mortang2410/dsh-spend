@@ -162,11 +162,11 @@ test("a rejected token surfaces without renewing the shared login", async () => 
 });
 
 test("a lapsed token never spawns the CLI to renew it", async () => {
-  // Both `claude auth status` and a one-shot `claude -p` start an OAuth refresh
-  // at init and exit before the rotated pair is written
-  // (anthropics/claude-code#95822, #102265, #105645). The refresh token is then
-  // spent, and the next refresh clears the saved login. Measured on 2.1.316:
-  // either command left a lapsed credential at `expiresAt` 0.
+  // A model-reaching run does renew the login (measured 2026-11-04 on 2.1.316:
+  // `claude -p` wrote a new expiresAt and left both tokens intact), but this is
+  // a poll path. Spawning a CLI per poll is wrong on its own, and racing Claude
+  // Code's refresh lock can invalidate the token family, so the adapter reports
+  // the lapse instead. Renewal lives in the host timer.
   const state = {
     text: JSON.stringify({ claudeAiOauth: { accessToken: "token-old", refreshToken: "refresh-old", expiresAt: 900_000 } }),
   };

@@ -54,7 +54,7 @@ async function writeLogDb(dir, rows) {
 function runHelper(db) {
   return spawnSync(
     PYTHON,
-    [OPENCODE_GO_SCRIPT, "--db", db, "--gateway", "http://127.0.0.1:9", "--stale-seconds", "100000000"],
+    ["-B", OPENCODE_GO_SCRIPT, "--db", db, "--gateway", "http://127.0.0.1:9", "--stale-seconds", "100000000"],
     { encoding: "utf8" },
   );
 }
@@ -105,7 +105,12 @@ test("a database with no payload row reports the failure", async () => {
     ]);
     const result = runHelper(db);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /hold no usage payload/);
+    assert.equal(
+      result.stderr.trim().split("\n").at(-1),
+      "rows for 'opencode-go-billing' hold no usage payload "
+        + "(newest 2026-11-07 13:25:00.000000001+00:00 status=cancelled); "
+        + "capture disabled, body trimmed, or every recent fetch failed",
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

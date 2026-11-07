@@ -188,7 +188,7 @@ config:
 
 > **实时额度/余额**：Code 计划按内置适配器（`lib/providers/`）直读订阅商接口——opencode-go 与 commandcode（两者都从 Bifrost 自己抓到的请求日志里复制，插件内不含凭据）、openai-codex（本机 `~/.codex/auth.json`）、claude-sub（`~/.claude/.credentials.json`）、github-copilot（`GH_TOKEN`/`GITHUB_TOKEN`/`gh` 配置）、zhipu（`ZHIPU_API_KEY`）、minimax（`MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`）、clinepass（`CLINEPASS_API_KEY`）；卡片显示各窗口实际百分比与重置时间。Token 计划余额直读：deepseek（`DEEPSEEK_API_KEY`）、moonshot（`MOONSHOT_API_KEY`）。`usageEndpoints` 可覆盖内置地址/超时，或为自定义供应商走通用 Bearer-key 通道（`<PROVIDER>_API_KEY`）。仅当登录态缺失、超时或非 200 时回退本地配额行并提示原因。
 
-> **网关代取的额度（opencode-go / commandcode）**：这两家的用量接口都要厂商密钥，而密钥只留在 Bifrost。Bifrost 为它们各配了一个专用 provider 块（`opencode-go-billing` / `commandcode-billing`），把该块的 `list_models` 路径重写到用量地址；插件这一侧的 helper 只是让网关刷新一次（本机无密钥的 `GET /v1/models`），再从 `~/.config/bifrost/logs.db` 里取最新一条带载荷的记录。刷新失败时保留上一条好记录，卡片不会清空。
+> **网关代取的额度（opencode-go / commandcode）**：这两家的用量接口都要厂商密钥，而密钥只留在 Bifrost。Bifrost 为它们各配了一个专用 provider 块（`opencode-go-billing` / `commandcode-billing`），把该块的 `list_models` 路径重写到用量地址；插件这一侧的 helper 只是让网关刷新一次（本机无密钥的 `GET /v1/models`），再从 `~/.config/bifrost/logs.db` 里取最新一条带载荷的记录。刷新失败时保留上一条好记录，卡片不会清空。`usageEndpoints` 的通用 Bearer-key 通道则会把厂商密钥放进 DSH，只在该主机允许时才用。
 
 > **计价行**可加可选 `provider` 字段做提供商精确匹配（如 `provider: openai-codex`），不带 provider 的行对任意提供商的同名模型生效；未匹配到任何行时回退 `defaultPricing`。Token Plan 的「剩余」= 配置的充值余额 − 累计已用费用；Code Plan 的「剩余」= 额度 − 周期内实际消耗。未配置 `plans` 的提供商不显示计划卡片（默认按 token 计费口径展示费用）。
 

@@ -169,7 +169,7 @@ def capture(args, provider, markers):
                 f"no '{provider}' row in {db_path}; is the Bifrost provider block configured and Bifrost running?")
         raise CaptureError(
             f"rows for '{provider}' hold no usage payload (newest {newest[0]} status={newest[1]}); "
-            "capture disabled, body trimmed, or every recent usage fetch failed")
+            "capture disabled, body trimmed, or every recent fetch failed")
     return {
         "payload": payload,
         "fetchedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

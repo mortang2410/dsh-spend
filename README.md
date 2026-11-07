@@ -106,7 +106,8 @@
 
 | 供应商 | 凭据来源 |
 |---|---|
-| OpenCode Go / DeepSeek / 智谱 / MiniMax / ClinePass / Moonshot | 环境变量或凭据缝：`OPENCODE_GO_API_KEY` / `DEEPSEEK_API_KEY` / `ZHIPU_API_KEY` / `MINIMAX_API_KEY`（兜底 `MINIMAX_CN_API_KEY`） / `CLINEPASS_API_KEY` / `MOONSHOT_API_KEY` |
+| OpenCode Go | 插件内无：密钥在 Bifrost，`scripts/opencode-go-usage.py` 读取已抓取的用量载荷 |
+| DeepSeek / 智谱 / MiniMax / ClinePass / Moonshot | 环境变量或凭据缝：`DEEPSEEK_API_KEY` / `ZHIPU_API_KEY` / `MINIMAX_API_KEY`（兜底 `MINIMAX_CN_API_KEY`） / `CLINEPASS_API_KEY` / `MOONSHOT_API_KEY` |
 | OpenAI Codex | 本机 `~/.codex/auth.json` 登录态 |
 | Claude Code | 本机 `~/.claude/.credentials.json` 登录态 |
 | GitHub Copilot | `GH_TOKEN` / `GITHUB_TOKEN` / `gh` 配置 |

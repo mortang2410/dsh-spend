@@ -104,7 +104,8 @@ Credentials are reused read-only from local CLI logins and the credentials seam:
 
 | Provider | Credential source |
 |---|---|
-| OpenCode Go / DeepSeek / Zhipu / MiniMax / ClinePass / Moonshot | env or credentials seam: `OPENCODE_GO_API_KEY` / `DEEPSEEK_API_KEY` / `ZHIPU_API_KEY` / `MINIMAX_API_KEY` (fallback `MINIMAX_CN_API_KEY`) / `CLINEPASS_API_KEY` / `MOONSHOT_API_KEY` |
+| OpenCode Go | none in the plugin: Bifrost holds the key and `scripts/opencode-go-usage.py` reads the captured usage payload |
+| DeepSeek / Zhipu / MiniMax / ClinePass / Moonshot | env or credentials seam: `DEEPSEEK_API_KEY` / `ZHIPU_API_KEY` / `MINIMAX_API_KEY` (fallback `MINIMAX_CN_API_KEY`) / `CLINEPASS_API_KEY` / `MOONSHOT_API_KEY` |
 | OpenAI Codex | local `~/.codex/auth.json` login |
 | Claude Code | local `~/.claude/.credentials.json` login |
 | GitHub Copilot | `GH_TOKEN` / `GITHUB_TOKEN` / `gh` config |

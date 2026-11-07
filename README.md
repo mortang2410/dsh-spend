@@ -68,7 +68,7 @@
 
 | 供应商 | 默认档 | 档位 | 额度口径 |
 |---|---|---|---|
-| OpenCode Go（`opencode-go`） | $10/月 | — | **实时额度**（官方 `GET /zen/go/v1/usage`：5h/周/月 实际已用百分比 + 重置时间）；接口不可用时回退周 $30（V4 Flash 约 79,050 请求/周） |
+| OpenCode Go（`opencode-go`） | $10/月 | — | **实时额度，插件内无任何凭据**（`GET /zen/go/v1/usage`：滚动 5h/周/月 实际已用百分比 + 重置时间）：Bifrost 用专用 `opencode-go-billing` provider 块以自己的密钥抓取，`scripts/opencode-go-usage.py` 再从请求日志取出载荷；取不到时回退按 $60 月度上限模型的美元额度（5h $12 / 周 $30 / 月 $60，V4 Flash 约 79,050 请求/周） |
 | OpenAI Codex（`openai-codex`） | Plus $20/月 | Plus / Pro 5x $100 / Pro 20x $200 / Business | **实时额度**（`chatgpt.com/backend-api/wham/usage`，需本机 `~/.codex/auth.json` 登录态；未登录回退 ~100 请求/周） |
 | GitHub Copilot（`github-copilot`） | Pro $10/月 | Free / Pro / Pro+ $39 / Max $100 / Business / Enterprise | **实时额度**（`api.github.com/copilot_internal/user`，需 `GH_TOKEN`/`GITHUB_TOKEN` 或 `gh auth login`；未登录回退 AI Credits 月 $15） |
 | Claude Code（`claude-sub`） | Pro $20/月 | Pro / Max 5x $100 / Max 20x $200 | **实时额度**（`api.anthropic.com/api/oauth/usage`，需本机 `~/.claude/.credentials.json` 登录态；未登录回退档位表 5h 1x/5x/20x）。该接口限流很紧，适配器最多每 5 分钟请求一次，遇到 HTTP 429 直接返回上一次的载荷 |
@@ -179,14 +179,16 @@ config:
       type: code           # 订阅额度制：使用量取近 periodDays 天的实际消耗
       quotaRequests: 100   # 周期请求额度（也可用 quotaTokens 按 token 额度）
       periodDays: 7
-  usageEndpoints:          # 订阅商实时额度接口（内置 opencode-go 默认值；其余内置适配器见注释）
-    - provider: opencode-go
-      url: https://opencode.ai/zen/go/v1/usage   # 官方额度端点（非公开文档 API）
-      apiKeyEnv: OPENCODE_GO_API_KEY             # 可选：凭据名（默认 <PROVIDER>_API_KEY）
-      timeoutMs: 15000                           # 可选：超时毫秒
+  usageEndpoints:          # 额外实时额度接口（内置适配器无需配置）
+    - provider: my-vendor  # 没有内置适配器的供应商
+      url: https://api.example.com/v1/usage
+      apiKeyEnv: MY_VENDOR_API_KEY   # 可选：凭据名（默认 <PROVIDER>_API_KEY）
+      timeoutMs: 15000               # 可选：超时毫秒
 ```
 
-> **实时额度/余额**：Code 计划按内置适配器（`lib/providers/`）直读订阅商接口——opencode-go（凭据缝 `OPENCODE_GO_API_KEY`）、openai-codex（本机 `~/.codex/auth.json`）、claude-sub（`~/.claude/.credentials.json`）、github-copilot（`GH_TOKEN`/`GITHUB_TOKEN`/`gh` 配置）、zhipu（`ZHIPU_API_KEY`）、minimax（`MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`）、clinepass（`CLINEPASS_API_KEY`）；卡片显示各窗口实际百分比与重置时间。Token 计划余额直读：deepseek（`DEEPSEEK_API_KEY`）、moonshot（`MOONSHOT_API_KEY`）。`usageEndpoints` 可覆盖内置地址/超时，或为自定义供应商走通用 Bearer-key 通道（`<PROVIDER>_API_KEY`）。仅当登录态缺失、超时或非 200 时回退本地配额行并提示原因。
+> **实时额度/余额**：Code 计划按内置适配器（`lib/providers/`）直读订阅商接口——opencode-go 与 commandcode（两者都从 Bifrost 自己抓到的请求日志里复制，插件内不含凭据）、openai-codex（本机 `~/.codex/auth.json`）、claude-sub（`~/.claude/.credentials.json`）、github-copilot（`GH_TOKEN`/`GITHUB_TOKEN`/`gh` 配置）、zhipu（`ZHIPU_API_KEY`）、minimax（`MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`）、clinepass（`CLINEPASS_API_KEY`）；卡片显示各窗口实际百分比与重置时间。Token 计划余额直读：deepseek（`DEEPSEEK_API_KEY`）、moonshot（`MOONSHOT_API_KEY`）。`usageEndpoints` 可覆盖内置地址/超时，或为自定义供应商走通用 Bearer-key 通道（`<PROVIDER>_API_KEY`）。仅当登录态缺失、超时或非 200 时回退本地配额行并提示原因。
+
+> **网关代取的额度（opencode-go / commandcode）**：这两家的用量接口都要厂商密钥，而密钥只留在 Bifrost。Bifrost 为它们各配了一个专用 provider 块（`opencode-go-billing` / `commandcode-billing`），把该块的 `list_models` 路径重写到用量地址；插件这一侧的 helper 只是让网关刷新一次（本机无密钥的 `GET /v1/models`），再从 `~/.config/bifrost/logs.db` 里取最新一条带载荷的记录。刷新失败时保留上一条好记录，卡片不会清空。
 
 > **计价行**可加可选 `provider` 字段做提供商精确匹配（如 `provider: openai-codex`），不带 provider 的行对任意提供商的同名模型生效；未匹配到任何行时回退 `defaultPricing`。Token Plan 的「剩余」= 配置的充值余额 − 累计已用费用；Code Plan 的「剩余」= 额度 − 周期内实际消耗。未配置 `plans` 的提供商不显示计划卡片（默认按 token 计费口径展示费用）。
 
@@ -205,7 +207,7 @@ config:
 - DeepSeek：[官方定价页](https://api-docs.deepseek.com/quick_start/pricing/)（2026-08-14 抓取）。\*DeepSeek 的上下文硬盘缓存自动生效、**无单独缓存写入计费项**，故 `cacheWritePerMillion: 0`。
 - OpenAI：[官方定价页](https://platform.openai.com/docs/pricing)（2026-07-30 降价后），缓存写 = 未命中输入 × 1.25。Luna 已降 80%（$1→$0.20 输入 / $6→$1.20 输出）。
 - ⚡ **DeepSeek 峰谷计价已内置**（2026-08-17 00:00 北京时间生效；高峰 09:00–12:00 / 14:00–18:00 本地时间，其余空闲为高峰一半）：v4-flash 高峰 $0.014(命中)/$0.44(未命中)/$1.32(输出)、空闲减半；v4-pro 高峰 $0.044/$1.32/$3.96、空闲减半。计价行可带 `schedule`（`effectiveAt` + `peakHours` + `peak`/`offPeak` 价格），**每条调用按自身发生时刻与时段计价**——8/17 前按上表 legacy 价，之后按峰谷价，历史调用不重算（计费单价表中带"峰谷计价"徽章）。
-- ⚠️ **OpenCode Go 是订阅制**（非按 token 计费）：其用量不按上表 token 单价扣费，而是消耗 $10/月订阅的美元额度（5h $12 / 周 $30 / 月 $60）——「按 token 估算」仅作相对占比参考，真实花费看「预计花费（月）」与计划卡片。
+- ⚠️ **OpenCode Go 是订阅制**（非按 token 计费）：其用量不按上表 token 单价扣费，而是消耗所调模型的美元月度上限（5h 窗口为该上限的 20%、周为 50%，例如 $60 上限的模型即 5h $12 / 周 $30 / 月 $60）——「按 token 估算」仅作相对占比参考，真实花费看「预计花费（月）」与计划卡片。
 - 若你的 provider 经代理中转计费（非官方直连），请按代理实际账单覆盖对应模型的单价。
 
 > 费用为按官方单价的**估算值**，仅作参考，非账单；页面底部亦有免责说明。
@@ -224,7 +226,7 @@ dsh-spend/
 │   ├── providers/        # 适配器实现（每厂商一个文件，共享 common.js）
 │   │   ├── index.js      # 注册表：PROVIDER_USAGE（额度）/ PROVIDER_BALANCE（余额）
 │   │   ├── common.js     # 共享工具（请求、鉴权、归一化）
-│   │   ├── opencode.js           # OpenCode Go 实时额度（官方端点）
+│   │   ├── opencode.js           # OpenCode Go 实时额度（从 Bifrost 日志复制，无凭据）
 │   │   ├── oauth-codex.js        # OpenAI Codex 实时额度（逆向接口）
 │   │   ├── oauth-claude.js       # Claude Code 实时额度（逆向接口）
 │   │   ├── oauth-copilot.js      # GitHub Copilot 实时额度（逆向接口）
@@ -235,6 +237,10 @@ dsh-spend/
 │   │   ├── balance-deepseek.js   # DeepSeek 账户余额（官方端点）
 │   │   └── balance-moonshot.js   # Moonshot 账户余额（官方端点）
 │   └── client.js         # 浏览器 bundle（手写 __ModuleLoader__ 格式）
+├── scripts/              # 密钥留在网关的供应商所用 helper
+│   ├── bifrost_usage.py  # 从 Bifrost 请求日志取最新用量载荷（共用管道）
+│   ├── opencode-go-usage.py  # OpenCode Go helper（供 providers/opencode.js）
+│   └── commandcode-usage.py  # Command Code helper（供 providers/quota-commandcode.js）
 ├── docs/screenshots/     # 界面截图
 ├── README.md             # 本文件（中文）
 ├── README.en.md          # 英文版

@@ -66,7 +66,7 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 
 | Provider | Default tier | Tiers | Quota |
 |---|---|---|---|
-| OpenCode Go (`opencode-go`) | $10/mo | — | **Live quota** (official `GET /zen/go/v1/usage`: actual 5h/week/month percent + reset); falls back to $30/week (~79,050 req/wk for V4 Flash) when the endpoint is unreachable |
+| OpenCode Go (`opencode-go`) | $10/mo | — | **Live quota** (`GET /zen/go/v1/usage`: actual rolling-5h/week/month percent + reset, read through the Bifrost gateway's captured request, so the plugin holds no key); falls back to the $60-limit model caps (5h $12 / week $30 / month $60, ~79,050 req/wk for V4 Flash) when no captured body is available |
 | OpenAI Codex (`openai-codex`) | Plus $20/mo | Plus / Pro 5x $100 / Pro 20x $200 / Business | **Live quota** (`chatgpt.com/backend-api/wham/usage`; needs `~/.codex/auth.json` login on this machine; falls back to ~100 req/wk) |
 | GitHub Copilot (`github-copilot`) | Pro $10/mo | Free / Pro / Pro+ $39 / Max $100 / Business / Enterprise | **Live quota** (`api.github.com/copilot_internal/user`; needs `GH_TOKEN`/`GITHUB_TOKEN` or `gh auth login`; falls back to AI Credits $15/mo) |
 | Claude Code (`claude-sub`) | Pro $20/mo | Pro / Max 5x $100 / Max 20x $200 | **Live quota** (`api.anthropic.com/api/oauth/usage`; needs `~/.claude/.credentials.json` login on this machine; falls back to the tier table). The endpoint throttles hard, so the adapter asks at most once per 5 minutes and replays the last payload on HTTP 429 |
@@ -177,14 +177,14 @@ config:
       type: code           # subscription quota: measured over the last periodDays
       quotaRequests: 100   # periodic request quota (or quotaTokens for token quota)
       periodDays: 7
-  usageEndpoints:          # live subscription-provider quota endpoints (opencode-go built in)
-    - provider: opencode-go
-      url: https://opencode.ai/zen/go/v1/usage   # official quota endpoint (undocumented API)
-      apiKeyEnv: OPENCODE_GO_API_KEY             # optional: credential name (default <PROVIDER>_API_KEY)
-      timeoutMs: 15000                           # optional: fetch timeout
+  usageEndpoints:          # extra live quota endpoints; the built-in adapters need none
+    - provider: my-vendor  # a provider without a built-in adapter
+      url: https://api.example.com/v1/usage
+      apiKeyEnv: MY_VENDOR_API_KEY   # optional: credential name (default <PROVIDER>_API_KEY)
+      timeoutMs: 15000               # optional: fetch timeout
 ```
 
-> **Live provider quota & balance**: Code plans are read through the built-in adapters (`lib/providers/`) — opencode-go (credentials seam `OPENCODE_GO_API_KEY`), openai-codex (`~/.codex/auth.json`), claude-sub (`~/.claude/.credentials.json`), github-copilot (`GH_TOKEN`/`GITHUB_TOKEN`/`gh`), zhipu (`ZHIPU_API_KEY`), minimax (`MINIMAX_API_KEY`, fallback `MINIMAX_CN_API_KEY`), clinepass (`CLINEPASS_API_KEY`) — showing the vendor's per-window percent and reset time; token-plan balances come from deepseek (`DEEPSEEK_API_KEY`) and moonshot (`MOONSHOT_API_KEY`). `usageEndpoints` rows override the built-in URL/timeout or add a custom provider via the generic Bearer-key path (`<PROVIDER>_API_KEY`). Only when the login is missing or the endpoint fails (timeout, non-200) does the card fall back to the local quota rows, with the reason shown.
+> **Live provider quota & balance**: Code plans are read through the built-in adapters (`lib/providers/`) — opencode-go and commandcode (both copied from the Bifrost gateway's own captured request, no credential in the plugin), openai-codex (`~/.codex/auth.json`), claude-sub (`~/.claude/.credentials.json`), github-copilot (`GH_TOKEN`/`GITHUB_TOKEN`/`gh`), zhipu (`ZHIPU_API_KEY`), minimax (`MINIMAX_API_KEY`, fallback `MINIMAX_CN_API_KEY`), clinepass (`CLINEPASS_API_KEY`) — showing the vendor's per-window percent and reset time; token-plan balances come from deepseek (`DEEPSEEK_API_KEY`) and moonshot (`MOONSHOT_API_KEY`). `usageEndpoints` rows override a built-in endpoint/timeout or add a custom provider via the generic Bearer-key path (`<PROVIDER>_API_KEY`). Only when the login is missing or the endpoint fails (timeout, non-200) does the card fall back to the local quota rows, with the reason shown.
 
 > **Pricing rows** accept an optional `provider` field for exact provider matching (e.g. `provider: openai-codex`); rows without one apply to any provider serving that model; unmatched models fall back to `defaultPricing`. Token Plan "remaining" = configured prepaid balance − accumulated estimated cost; Code Plan "remaining" = quota − actual consumption in the period. Providers without a `plans` entry show no plan card (their cost is still shown in the by-provider table).
 
@@ -203,7 +203,7 @@ config:
 - DeepSeek: [official pricing](https://api-docs.deepseek.com/quick_start/pricing/) (fetched 2026-08-14). \*DeepSeek's disk cache is automatic and has **no separate cache-write line item**, hence `cacheWritePerMillion: 0`.
 - OpenAI: [official pricing](https://platform.openai.com/docs/pricing) (after the 2026-07-30 cuts); cache writes bill at 1.25× uncached input. Luna is down 80% ($1→$0.20 input / $6→$1.20 output).
 - ⚡ **DeepSeek peak/off-peak pricing is built in** (effective 2026-08-17 00:00 +08:00; peak 09:00–12:00 / 14:00–18:00 local time, off-peak at half price): v4-flash peak $0.014 (hit) / $0.44 (miss) / $1.32 (output), off-peak halved; v4-pro peak $0.044 / $1.32 / $3.96, off-peak halved. A pricing row can carry a `schedule` (`effectiveAt` + `peakHours` + `peak`/`offPeak` rates) — **each call is priced by its own timestamp**: legacy rates before 8/17, peak/off-peak after; historical calls are never re-priced (rate table rows show a "peak/off-peak" badge).
-- ⚠️ **OpenCode Go is subscription-based** (not token-billed): usage consumes the $10/month dollar quota (5h $12 / week $30 / month $60) instead of the token rates above — the "token estimate" is only a relative reference; real spend is the "estimated monthly spend" and the plan cards.
+- ⚠️ **OpenCode Go is subscription-based** (not token-billed): usage consumes the dollar allowance of the model you call (monthly limit per model; the 5-hour window is 20% of it and the week is 50%, e.g. $12 / $30 / $60 for a $60-limit model) instead of the token rates above — the "token estimate" is only a relative reference; real spend is the "estimated monthly spend" and the plan cards.
 - If your provider bills through a proxy (not the official endpoint), override the model rates to match the proxy's actual billing.
 
 > Cost figures are **estimates** for reference only, not a bill (disclaimer also shown at the bottom of the page).
@@ -222,7 +222,7 @@ dsh-spend/
 │   ├── providers/        # adapter implementations (one file per vendor, sharing common.js)
 │   │   ├── index.js      # registries: PROVIDER_USAGE (quota) / PROVIDER_BALANCE (balance)
 │   │   ├── common.js     # shared helpers (request, auth, normalization)
-│   │   ├── opencode.js           # OpenCode Go live quota (official endpoint)
+│   │   ├── opencode.js           # OpenCode Go live quota, copied from Bifrost's log (no credential)
 │   │   ├── oauth-codex.js        # OpenAI Codex live quota (reverse-engineered)
 │   │   ├── oauth-claude.js       # Claude Code live quota (reverse-engineered)
 │   │   ├── oauth-copilot.js      # GitHub Copilot live quota (reverse-engineered)
@@ -233,6 +233,10 @@ dsh-spend/
 │   │   ├── balance-deepseek.js   # DeepSeek account balance (official endpoint)
 │   │   └── balance-moonshot.js   # Moonshot account balance (official endpoint)
 │   └── client.js         # browser bundle (hand-written __ModuleLoader__ format)
+├── scripts/              # helpers for the providers whose key lives in the gateway
+│   ├── bifrost_usage.py  # newest usage payload out of Bifrost's request log (shared plumbing)
+│   ├── opencode-go-usage.py  # OpenCode Go helper for providers/opencode.js
+│   └── commandcode-usage.py  # Command Code helper for providers/quota-commandcode.js
 ├── docs/screenshots/     # UI screenshots
 ├── README.md             # Chinese readme
 ├── README.en.md          # this file

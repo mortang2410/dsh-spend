@@ -14,7 +14,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COMMANDCODE_SCRIPT, PYTHON } from "../lib/providers/quota-commandcode.js";
+import { COMMANDCODE_SCRIPT } from "../lib/providers/quota-commandcode.js";
+import { PYTHON } from "../lib/providers/common.js";
 
 /** Billing payload as Bifrost captures it (GOAT plan: 5h cap 14, week cap 35). */
 const billingBody = (fiveHourUsed) => JSON.stringify({

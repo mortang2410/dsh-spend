@@ -125,6 +125,7 @@ Credentials are reused read-only from local CLI logins and the credentials seam:
 - **Dimensions**: totals / by provider / by model / by hour (zero-filled continuous series for the charts) / by day / by session / recent calls / performance (per-step TTFT, tokens/s and latency, aggregated per model and per hour) / session × model details.
 - **Performance semantics**: TTFT = request (`request/header`) → first content chunk; generation window = first → last content chunk; tokens/s = output tokens ÷ generation window. Tool-loop follow-up steps have no separate request log, so their TTFT is **estimated** from `step/start` (samples carry an `ttftEstimated` flag).
 - **Snapshot caching**: snapshots are cached behind a signature of file sizes + mtimes + live event counts; unchanged data returns from cache.
+- **Bounded payload**: the session × model table keeps the `maxSessionModelRows` (200) costliest rows, so on a store of about 2,900 sessions the polled snapshot measures about 212 KB, and about 263 KB once the RPC envelope is counted, instead of 1.1 MB; the details tab and the JSON export state the full row count.
 
 ## Installation
 

@@ -169,6 +169,7 @@ config:
     cacheWritePerMillion: 0
   maxSessions: 20          # 按会话统计最多展示行数
   maxRecentCalls: 50       # 最近调用最多展示行数
+  maxSessionModelRows: 200 # 会话×模型明细表行数上限（按花费降序截取，轮询快照不再传输上兆字节）
   seriesHours: 168         # 时间曲线窗口（小时，服务端按此出 0 填充连续序列；UI 可切换 24h/72h/7d）
   refreshSeconds: 30       # 悬浮窗自动刷新间隔（秒，>= 5）
   monthlyBudget: 50        # 可选：月度花费预算（单位同 currency），UI 显示已用/剩余并告警

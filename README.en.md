@@ -167,6 +167,7 @@ config:
     cacheWritePerMillion: 0
   maxSessions: 20          # max rows in the by-session table
   maxRecentCalls: 50       # max recent calls
+  maxSessionModelRows: 200 # rows of the session × model table, costliest first (caps the snapshot the pill polls)
   seriesHours: 168         # time-series window in hours (zero-filled; UI offers 24h/72h/7d)
   refreshSeconds: 30       # auto-refresh interval in seconds (>= 5)
   monthlyBudget: 50        # optional monthly spend budget (same currency): used/remaining + alerts

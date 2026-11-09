@@ -200,3 +200,17 @@ test("scanSessions reads every session-format generation and prefers the current
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("session-model rows keep the costliest rows inside the configured cap", () => {
+  // Regression: uncapped, this section was 976 KB of the 1118 KB snapshot that
+  // the pill re-fetches every refresh interval on a store of ~2900 sessions.
+  const calls = Array.from({ length: 5 }, (_, index) => ({
+    ...sample("deepseek-official", "deepseek-v4-flash", 1000 * (index + 1)),
+    sessionId: `s${index}`,
+  }));
+  const capped = buildStats(calls, [Flash], {}, { maxSessionModelRows: 2 });
+  assert.equal(capped.bySessionModel.length, 2);
+  assert.deepEqual(capped.bySessionModel.map((row) => row.sessionId), ["s4", "s3"]);
+  // The default cap leaves a small store untouched.
+  assert.equal(buildStats(calls, [Flash], {}, {}).bySessionModel.length, 5);
+});

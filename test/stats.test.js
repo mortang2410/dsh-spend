@@ -211,6 +211,8 @@ test("session-model rows keep the costliest rows inside the configured cap", () 
   const capped = buildStats(calls, [Flash], {}, { maxSessionModelRows: 2 });
   assert.equal(capped.bySessionModel.length, 2);
   assert.deepEqual(capped.bySessionModel.map((row) => row.sessionId), ["s4", "s3"]);
+  // The total is what the details view uses to say the table is a top slice.
+  assert.equal(capped.sessionModelTotal, 5);
   // The default cap leaves a small store untouched.
   assert.equal(buildStats(calls, [Flash], {}, {}).bySessionModel.length, 5);
 });

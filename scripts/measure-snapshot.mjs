@@ -4,8 +4,9 @@
  * broken down per section, from the host's persisted replay cache.
  *
  * The cache path is the host's own (see UsageStatsService.scanCacheFile); pass
- * another path to measure a different store. Build with the same caps the
- * service passes, so the numbers match what travels over the wire.
+ * another path to measure a different store. No pricing table is supplied here,
+ * so the kept row *set* is ordered by call count rather than by cost; the sizes
+ * this prints, which are what the change is judged on, do not depend on that.
  *
  * Usage: node scripts/measure-snapshot.mjs [cachePath]
  */

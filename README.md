@@ -184,6 +184,11 @@ config:
       type: code           # 订阅额度制：使用量取近 periodDays 天的实际消耗
       quotaRequests: 100   # 周期请求额度（也可用 quotaTokens 按 token 额度）
       periodDays: 7
+    - provider: mistral    # 经网关路由调用的厂商
+      label: Mistral Vibe  # 卡片标题（缺省用 provider）
+      type: token
+      routes:              # 这些网关路由 id 的调用计入本计划
+        - mistral/deepseek-mistral
   usageEndpoints:          # 额外实时额度接口（内置适配器无需配置）
     - provider: my-vendor  # 没有内置适配器的供应商
       url: https://api.example.com/v1/usage
@@ -196,6 +201,8 @@ config:
 > **网关代取的额度（opencode-go / commandcode）**：这两家的用量接口都要厂商密钥，而密钥只留在 Bifrost。Bifrost 为它们各配了一个专用 provider 块（`opencode-go-billing` / `commandcode-billing`），把该块的 `list_models` 路径重写到用量地址；插件这一侧的 helper 只是让网关刷新一次（本机无密钥的 `GET /v1/models`），再从 `~/.config/bifrost/logs.db` 里取最新一条带载荷的记录。刷新失败时保留上一条好记录，卡片不会清空。`usageEndpoints` 的通用 Bearer-key 通道则会把厂商密钥放进 DSH，只在该主机允许时才用。
 
 > **计价行**可加可选 `provider` 字段做提供商精确匹配（如 `provider: openai-codex`），不带 provider 的行对任意提供商的同名模型生效；未匹配到任何行时回退 `defaultPricing`。Token Plan 的「剩余」= 配置的充值余额 − 累计已用费用；Code Plan 的「剩余」= 额度 − 周期内实际消耗。未配置 `plans` 的提供商不显示计划卡片（默认按 token 计费口径展示费用）。
+
+> **网关路由上的计划**：网关的调用以网关自己的 provider id（`bifrost`）上报、model 为客户端路由 id，因此面向路由背后厂商的计划用 `routes` 列出路由 id 来认领这些调用；按提供商汇总的表仍把它们算在网关名下。
 
 ## 价格来源与计费口径
 

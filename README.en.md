@@ -182,6 +182,11 @@ config:
       type: code           # subscription quota: measured over the last periodDays
       quotaRequests: 100   # periodic request quota (or quotaTokens for token quota)
       periodDays: 7
+    - provider: mistral    # a vendor reached through a gateway route
+      label: Mistral Vibe  # card title (defaults to the provider id)
+      type: token
+      routes:              # gateway route ids whose calls count for this plan
+        - mistral/deepseek-mistral
   usageEndpoints:          # extra live quota endpoints; the built-in adapters need none
     - provider: my-vendor  # a provider without a built-in adapter
       url: https://api.example.com/v1/usage
@@ -194,6 +199,8 @@ config:
 > **The generic Bearer-key path puts the vendor key in DSH.** Use it only where that is acceptable. On a host that keeps every provider key in one gateway process, give the vendor a gateway-side route at its usage URL and read the captured body back through a helper instead — that is how the opencode-go and commandcode adapters work, and why they hold no credential.
 
 > **Pricing rows** accept an optional `provider` field for exact provider matching (e.g. `provider: openai-codex`); rows without one apply to any provider serving that model; unmatched models fall back to `defaultPricing`. Token Plan "remaining" = configured prepaid balance − accumulated estimated cost; Code Plan "remaining" = quota − actual consumption in the period. Providers without a `plans` entry show no plan card (their cost is still shown in the by-provider table).
+
+> **Plans on gateway routes**: the gateway logs every call under its own provider id (`bifrost`) and the client-facing route id as the model, so a plan for the vendor behind a route lists that route id under `routes` and claims those calls; the by-provider table still shows them under the gateway.
 
 ## Rate sources & cost model
 

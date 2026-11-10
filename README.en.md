@@ -26,7 +26,7 @@ A **floating usage widget** pinned to the bottom-right corner of the dsh Web UI:
 - 🖱️ **Three-level interaction**: persistent floating pill → hover summary preview → click for a four-tab dashboard
 - 📊 **Multi-dimensional stats**: by provider / model / hour / day / session / working directory / recent calls, plus performance metrics (TTFT, generation speed)
 - 📈 **Time-series charts**: today hour-by-hour, 24h/72h/7d curves, 52-week activity heatmap
-- 🏷️ **Auto-detected billing plans**: built-in knowledge base (17 providers / 131 model rate cards), distinguishes subscription (Code) from pay-as-you-go (Token)
+- 🏷️ **Auto-detected billing plans**: built-in knowledge base (18 providers / 143 model rate cards), distinguishes subscription (Code) from pay-as-you-go (Token)
 - 🔴 **Live quota & balance**: 9 built-in adapters (7 quota + 2 balance) showing the vendor's real reported values, fail-safe fallback, never crashes
 - ⚡ **DeepSeek peak/off-peak pricing**: since 8/17 each call is priced by its own timestamp (peak/off-peak schedule)
 - 💱 **$ / ¥ currency switch**: live USD→CNY quote (falls back to `usdCnyRate`, default 7.2)

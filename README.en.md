@@ -60,7 +60,7 @@ A **floating usage widget** pinned to the bottom-right corner of the dsh Web UI:
 
 ## Provider auto-detection (zero configuration)
 
-The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, verified against official docs on 2026-08-14) covering **17 providers / 131 model rate cards**. Provider ids are normalized through an alias table (`glm`→zhipu, `kimi`→moonshot, `dashscope`→qwen, `gemini`→google, `grok`→xai, `claude`→anthropic, `copilot`→github-copilot, `minimax-cn`→minimax, `deepseek-official`→deepseek, …). Providers that appear in your session logs are **matched automatically** (badged "auto" in the UI); an explicit `plans` / `pricing` config always overrides auto-detection.
+The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, verified against official docs on 2026-08-14) covering **18 providers / 143 model rate cards**. Provider ids are normalized through an alias table (`glm`→zhipu, `kimi`→moonshot, `dashscope`→qwen, `gemini`→google, `grok`→xai, `claude`→anthropic, `copilot`→github-copilot, `minimax-cn`→minimax, `deepseek-official`→deepseek, …). Providers that appear in your session logs are **matched automatically** (badged "auto" in the UI); an explicit `plans` / `pricing` config always overrides auto-detection.
 
 ### Subscription (Code) plans — auto-detected with fees and quotas
 
@@ -84,7 +84,7 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 | Anthropic (`anthropic`) | claude-opus-5, sonnet-5, haiku-4-5, fable-5, opus/sonnet-4.x |
 | Google (`google`) | gemini-3.7/3.6/3.5 flash, 3.1-pro, 2.5 pro/flash/lite |
 | xAI (`xai`) | grok-4.6, 4.5, 4.3, build-0.1 |
-| Mistral (`mistral`) | large-3, medium-3.5, small-4, ministral-3 |
+| Mistral (`mistral`) | large-3, medium-3.5, small-4, ministral-3, deepseek-v4-1-flash-1017 |
 | Moonshot (`moonshot`) | kimi-k3, k2.7-code |
 | Zhipu (`zhipu`) | glm-5.2, 5.1, 5 |
 | Alibaba (`qwen`) | qwen3.8-max, 3.7-max/plus/flash |
@@ -92,6 +92,8 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 | OpenRouter (`openrouter`) | 50 live-catalog models |
 | OpenCode Zen (`opencode-zen`) | PAYG gateway rates (Claude/GPT/Gemini/Grok/DeepSeek) |
 | DeepSeek (`deepseek`) | v4-flash, v4-pro |
+
+**Gateway routes**: Bifrost calls arrive under provider `bifrost` with the client route id as the model, so the route `mistral/deepseek-mistral` (and its bare alias `deepseek-mistral`) is priced from Mistral's card for `deepseek-v4-1-flash-1017` at $0.30 input, $0.007 cached input, $1.20 output per million tokens and no cache-write fee; the route carries no subscription, no quota and no credential.
 
 ### Live quota & balance (vendor-direct)
 

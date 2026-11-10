@@ -62,7 +62,7 @@
 
 ## 供应商自动识别（零配置）
 
-插件内置**供应商知识库**（`lib/knowledge.js`，2026-08-14 官方文档核实）：**17 个供应商 / 131 个模型价格**。provider id 自动归一化别名：`glm`→zhipu、`kimi`→moonshot、`dashscope`→qwen、`gemini`→google、`grok`→xai、`claude`→anthropic、`copilot`→github-copilot、`minimax-cn`→minimax、`deepseek-official`→deepseek 等。日志中出现的提供商**自动匹配**知识库生成计划与价格（UI 标记"自动识别"）；显式 `plans` / `pricing` 配置始终覆盖自动识别。
+插件内置**供应商知识库**（`lib/knowledge.js`，2026-08-14 官方文档核实）：**18 个供应商 / 143 个模型价格**。provider id 自动归一化别名：`glm`→zhipu、`kimi`→moonshot、`dashscope`→qwen、`gemini`→google、`grok`→xai、`claude`→anthropic、`copilot`→github-copilot、`minimax-cn`→minimax、`deepseek-official`→deepseek 等。日志中出现的提供商**自动匹配**知识库生成计划与价格（UI 标记"自动识别"）；显式 `plans` / `pricing` 配置始终覆盖自动识别。
 
 ### 订阅制（Code 计划）— 自动识别档位费与额度
 
@@ -86,7 +86,7 @@
 | Anthropic（`anthropic`） | claude-opus-5、sonnet-5、haiku-4-5、fable-5、opus/sonnet-4.x |
 | Google（`google`） | gemini-3.7/3.6/3.5 flash、3.1-pro、2.5 pro/flash/lite |
 | xAI（`xai`） | grok-4.6、4.5、4.3、build-0.1 |
-| Mistral（`mistral`） | large-3、medium-3.5、small-4、ministral-3 |
+| Mistral（`mistral`） | large-3、medium-3.5、small-4、ministral-3、deepseek-v4-1-flash-1017 |
 | Moonshot（`moonshot`） | kimi-k3、k2.7-code |
 | 智谱（`zhipu`） | glm-5.2、5.1、5 |
 | 阿里（`qwen`） | qwen3.8-max、3.7-max/plus/flash |
@@ -94,6 +94,8 @@
 | OpenRouter（`openrouter`） | 实时目录 50 个热门模型 |
 | OpenCode Zen（`opencode-zen`） | PAYG 网关价（Claude/GPT/Gemini/Grok/DeepSeek） |
 | DeepSeek（`deepseek`） | v4-flash、v4-pro |
+
+**网关路由**：Bifrost 的调用以 provider `bifrost` 上报、model 为客户端路由 id，因此路由 `mistral/deepseek-mistral`（及其裸别名 `deepseek-mistral`）按 Mistral 的 `deepseek-v4-1-flash-1017` 价目计费：输入 $0.30、缓存输入 $0.007、输出 $1.20（每百万 token），无缓存写入费；该路由不带订阅费、额度或凭据。
 
 ### 实时额度 / 余额（厂商直读）
 

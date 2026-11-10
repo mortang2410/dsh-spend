@@ -200,7 +200,7 @@ config:
 
 > **Pricing rows** accept an optional `provider` field for exact provider matching (e.g. `provider: openai-codex`); rows without one apply to any provider serving that model; unmatched models fall back to `defaultPricing`. Token Plan "remaining" = configured prepaid balance − accumulated estimated cost; Code Plan "remaining" = quota − actual consumption in the period. Providers without a `plans` entry show no plan card (their cost is still shown in the by-provider table).
 
-> **Plans on gateway routes**: the gateway logs every call under its own provider id (`bifrost`) and the client-facing route id as the model, so a plan for the vendor behind a route lists that route id under `routes` and claims those calls; the by-provider table still shows them under the gateway.
+> **Plans on gateway routes**: the gateway logs every call under its own provider id (`bifrost`) and the client-facing route id as the model, so a plan for the vendor behind a route lists that route id under `routes` and claims those calls; the by-provider table still shows them under the gateway. List every spelling your logs use, because a route's bare alias (e.g. `deepseek-mistral`) is a separate id from its block-prefixed form. A provider-matched plan wins over another plan's route claim, and when two plans list the same route the later one wins.
 
 ## Rate sources & cost model
 

@@ -79,4 +79,9 @@ test("a plan without a label keeps the provider as its title", () => {
     plans: [{ provider: "mistral", type: "token" }],
   });
   assert.equal(stats.plans[0].label, null);
+  // An empty string must fall back too: the card title would render blank.
+  const blank = buildStats([routeSample("mistral/deepseek-mistral")], pricing, defaultPricing, {
+    plans: [{ provider: "mistral", type: "token", label: "" }],
+  });
+  assert.equal(blank.plans[0].label, null);
 });

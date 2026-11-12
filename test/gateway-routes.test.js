@@ -106,9 +106,9 @@ test("an opendesign provider id prices the vendor's own model ids", () => {
     assert.equal(row.auto, true);
   }
   const price = resolvePrice("deepseek-v4.1-flash", "opendesign", assemble(["opendesign"]), defaultPricing);
-  assert.equal(price.inputPerMillion, 0.3);
-  assert.equal(price.outputPerMillion, 1.2);
-  assert.equal(price.cacheReadPerMillion, 0.006);
+  assert.equal(price.inputPerMillion, 0.15);
+  assert.equal(price.outputPerMillion, 0.6);
+  assert.equal(price.cacheReadPerMillion, 0.003);
 });
 
 test("every registered route names a vendor rate card that prices it", () => {
@@ -141,8 +141,10 @@ test("every registered route names a vendor rate card that prices it", () => {
 });
 
 test("opendesign routes price from the OpenDesign card on both gateway client ids", () => {
+  // Credit dollars: DeepSeek's peak rate x the vendor's Design Plan multiplier
+  // (Flash 0.5x, Eco 0.27x), the unit the plan's window caps are quoted in.
   const cards = {
-    "opendesign/deepseek-opendesign": { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 },
+    "opendesign/deepseek-opendesign": { input: 0.15, output: 0.6, cacheRead: 0.003, cacheWrite: 0 },
     "opendesign/deepseek-eco": { input: 0.081, output: 0.324, cacheRead: 0.00162, cacheWrite: 0 },
   };
   for (const gateway of ["bifrost", "vision-toolkit-bifrost"]) {

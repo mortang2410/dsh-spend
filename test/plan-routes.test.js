@@ -74,6 +74,39 @@ test("route-scoped code plan fills its quota windows", () => {
   assert.equal(stats.plans[0].remainingRequests, 98);
 });
 
+test("route-claimed code plan fills the vendor's 5h / week / month cost windows", () => {
+  const now = Date.now();
+  const call = (msAgo, inputTokens) => ({
+    ...routeSample("opendesign/deepseek-opendesign", inputTokens),
+    time: now - msAgo,
+  });
+  const stats = buildStats(
+    [call(3600e3, 1_000_000), call(3 * 86400e3, 1_000_000)],
+    pricing,
+    defaultPricing,
+    {
+      plans: [{
+        provider: "opendesign",
+        label: "OpenDesign",
+        type: "code",
+        routes: ["opendesign/deepseek-opendesign"],
+        quota: { dollarsPer5h: 18, dollarsPerWeek: 55, dollarsPerMonth: 220 },
+      }],
+    },
+  );
+  const limits = Object.fromEntries((stats.plans[0].limits ?? []).map((limit) => [limit.window, limit]));
+  // 1M input tokens at the Flash credit rate ($0.15/M).
+  assert.ok(Math.abs(limits["5h"].used - 0.15) < 1e-9, `5h used=${limits["5h"].used}`);
+  assert.ok(Math.abs(limits["5h"].remaining - 17.85) < 1e-9, `5h remaining=${limits["5h"].remaining}`);
+  // The call from three days ago is inside the week and month windows too.
+  assert.ok(Math.abs(limits.week.used - 0.3) < 1e-9, `week used=${limits.week.used}`);
+  assert.ok(Math.abs(limits.month.used - 0.3) < 1e-9, `month used=${limits.month.used}`);
+  assert.ok(Math.abs(limits.week.pct - (0.3 / 55) * 100) < 1e-9, `week pct=${limits.week.pct}`);
+  assert.equal(limits.week.unit, "cost");
+  // The plan's headline figure is its week window.
+  assert.ok(Math.abs(stats.plans[0].usedCost - 0.3) < 1e-9, `usedCost=${stats.plans[0].usedCost}`);
+});
+
 test("a plan without a label keeps the provider as its title", () => {
   const stats = buildStats([routeSample("mistral/deepseek-mistral")], pricing, defaultPricing, {
     plans: [{ provider: "mistral", type: "token" }],

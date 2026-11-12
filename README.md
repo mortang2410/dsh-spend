@@ -28,7 +28,7 @@
 - 🖱️ **三级交互**：悬浮胶囊常驻 → hover 摘要预览 → 点击展开四标签页详情面板
 - 📊 **多维统计**：按提供商 / 模型 / 小时 / 天 / 会话 / 工作目录 / 最近调用，含性能指标（TTFT、生成速度）
 - 📈 **时间序列图表**：今日逐小时、24h/72h/7d 时间曲线、52 周活跃热力图
-- 🏷️ **计费计划自动识别**：内置知识库（19 供应商 / 143 模型价格），自动区分订阅制（Code）与按量（Token）
+- 🏷️ **计费计划自动识别**：内置知识库（19 供应商 / 145 模型价格），自动区分订阅制（Code）与按量（Token）
 - 🔴 **实时额度 / 余额直读**：9 家订阅商内置适配器（额度 7 + 余额 2），展示厂商接口返回的真实值，失败安全回退不崩溃
 - ⚡ **DeepSeek 峰谷计价**：8/17 起按调用时刻自动按高峰/空闲价计费
 - 💱 **$ / ¥ 货币切换**：实时汇率（失败回退 `usdCnyRate`，默认 7.2）
@@ -62,7 +62,7 @@
 
 ## 供应商自动识别（零配置）
 
-插件内置**供应商知识库**（`lib/knowledge.js`，按各厂商官方文档核实）：**19 个供应商 / 143 个模型价格**。provider id 自动归一化别名：`glm`→zhipu、`kimi`→moonshot、`dashscope`→qwen、`gemini`→google、`grok`→xai、`claude`→anthropic、`copilot`→github-copilot、`minimax-cn`→minimax、`deepseek-official`→deepseek 等。日志中出现的提供商**自动匹配**知识库生成计划与价格（UI 标记"自动识别"）；显式 `plans` / `pricing` 配置始终覆盖自动识别。
+插件内置**供应商知识库**（`lib/knowledge.js`，按各厂商官方文档核实）：**19 个供应商 / 145 个模型价格**。provider id 自动归一化别名：`glm`→zhipu、`kimi`→moonshot、`dashscope`→qwen、`gemini`→google、`grok`→xai、`claude`→anthropic、`copilot`→github-copilot、`minimax-cn`→minimax、`deepseek-official`→deepseek 等。日志中出现的提供商**自动匹配**知识库生成计划与价格（UI 标记"自动识别"）；显式 `plans` / `pricing` 配置始终覆盖自动识别。
 
 ### 订阅制（Code 计划）— 自动识别档位费与额度
 
@@ -77,6 +77,7 @@
 | ClinePass（`clinepass`） | 官方套餐 | — | **实时额度**（官方 `api.cline.bot/v1/users/me/plan/usage-limits`：300 分钟/周/月 已用百分比 + 重置时间；凭据缝 `CLINEPASS_API_KEY`） |
 | Command Code（`commandcode`） | 官方套餐（Go / GOAT / Pro / Max） | — | **实时额度，插件内无任何凭据**（未公开的 `api.commandcode.ai/alpha/billing/credits`）：Bifrost 用专用 `commandcode-billing` provider 块以自己的密钥抓取，`scripts/commandcode-usage.py` 再从请求日志取出各窗口。5h/周直接来自载荷；月额度用 `池子 - credits.monthlyCredits` 计算，池子取自厂商公布的套餐表，按滚动上限识别（GOAT 14/35 → 70 credits） |
 | Google AI / Gemini CLI（`google-ai-sub`） | AI Pro $19.99/月 | AI Pro / Ultra 5x $99.99 / Ultra 20x $199.99 | 无公开用量接口，按官方每日上限（1,500 / 2,000 请求/天）展示 |
+| OpenDesign（`opendesign`） | Go $10/月 | Go / Plus $20 / Pro $100 / Max $200 | **本地估算额度，插件内无任何凭据**：额度只在控制面可读，推理密钥被拒，故卡片把两条网关路由的调用按厂商 Design Plan 倍率折算成 credits（Flash 0.5×、Eco 0.27×），对厂商公布的窗口显示已用/剩余——Go 为 5 小时 $18 / 7 天 $55 / 月 $220，Plus 及以上只有 7 天与月窗口 |
 
 ### 按量计费（Token 计划）— 自动带官方价
 
@@ -87,7 +88,6 @@
 | Google（`google`） | gemini-3.7/3.6/3.5 flash、3.1-pro、2.5 pro/flash/lite |
 | xAI（`xai`） | grok-4.6、4.5、4.3、build-0.1 |
 | Mistral（`mistral`） | large-3、medium-3.5、small-4、ministral-3、deepseek-v4-1-flash-1017 |
-| OpenDesign（`opendesign`） | deepseek-v4.1-flash、deepseek-v4.1-flash-eco（订阅制，卡片按这两条网关路由的调用计价） |
 | Moonshot（`moonshot`） | kimi-k3、k2.7-code |
 | 智谱（`zhipu`） | glm-5.2、5.1、5 |
 | 阿里（`qwen`） | qwen3.8-max、3.7-max/plus/flash |
@@ -98,7 +98,7 @@
 
 **网关路由**：Bifrost 的调用以 provider `bifrost` 上报、model 为客户端路由 id，因此路由 `mistral/deepseek-mistral`（及其裸别名 `deepseek-mistral`）按 Mistral 的 `deepseek-v4-1-flash-1017` 价目计费：输入 $0.30、缓存输入 $0.007、输出 $1.20（每百万 token），无缓存写入费；该路由不带订阅费、额度或凭据。
 
-同一张路由表也认领 OpenDesign 的两条路由（`opendesign/deepseek-opendesign`、`opendesign/deepseek-eco`）：前者按 DeepSeek 官方高峰价 `deepseek-v4.1-flash` 计费（输入 $0.30 / 缓存输入 $0.006 / 输出 $1.20），后者按厂商公布的 Eco 0.27× 价（$0.081 / $0.00162 / $0.324）。视觉工具包经自己的客户端 id `vision-toolkit-bifrost` 走同一个网关，这两条路由在那里同样计价；DeepSeek 空闲价为高峰的一半，所以空闲时段的估算最多高出一倍。
+同一张路由表也认领 OpenDesign 的两条路由（`opendesign/deepseek-opendesign`、`opendesign/deepseek-eco`），单价按 **credits** 计（DeepSeek V4.1 Flash 官方高峰价 × 厂商 Design Plan 倍率）：`deepseek-v4.1-flash` 为 0.5×（输入 $0.15 / 缓存输入 $0.003 / 输出 $0.60），`deepseek-v4.1-flash-eco` 为 0.27×（$0.081 / $0.00162 / $0.324）；这样计划卡的美元行与厂商的 credits 窗口（Go：5 小时 $18 / 7 天 $55 / 月 $220）同一口径。视觉工具包经自己的客户端 id `vision-toolkit-bifrost` 走同一个网关，这两条路由在那里同样计价；DeepSeek 空闲价为高峰的一半，所以空闲时段的估算最多高出一倍。
 
 ### 实时额度 / 余额（厂商直读）
 
@@ -192,12 +192,17 @@ config:
       type: token
       routes:              # 这些网关路由 id 的调用计入本计划
         - mistral/deepseek-mistral
-    - provider: opendesign # 订阅制厂商，调用经网关的两条路由
+    - provider: opendesign # 订阅制厂商，额度只在控制面可读
       label: OpenDesign
-      type: token
-      routes:
+      type: code
+      routes:              # 这些路由的调用按 credits 计入下面的窗口
         - opendesign/deepseek-opendesign
         - opendesign/deepseek-eco
+      quota:               # 厂商公布的 Design Plan 窗口（Go 档）
+        dollarsPer5h: 18
+        dollarsPerWeek: 55
+        dollarsPerMonth: 220
+        note: Go 档口径；Plus/Pro/Max 只有 7 天与月窗口，改这三个数字即可
   usageEndpoints:          # 额外实时额度接口（内置适配器无需配置）
     - provider: my-vendor  # 没有内置适配器的供应商
       url: https://api.example.com/v1/usage
@@ -274,7 +279,7 @@ dsh-spend/
 - 计费为估算值，不是账单；缓存读按命中单价计费。
 - 日志解码失败的会话会计入 `decodeErrors` 并在页脚提示。
 - Codex/Claude/Copilot 额度接口为非公开/逆向接口，可能随时失效；适配器已做失败降级（显示原因并回退本地配额行），不会崩溃。
-- OpenDesign 的计划额度（Go 档 5 小时 $18 / 7 天 $55 / 月 $220 的 Design Plan credits）只在其控制面可读，推理密钥被拒，所以插件不含凭据、也不显示剩余额度：`opendesign` 计划卡只汇总这两条路由按官方价目估算的调用价值，且 credits = 模型用量 × 厂商倍率（Flash 0.5×、Eco 0.27×），与美元分档不可直接比较。
+- OpenDesign 的额度（Go 档 5 小时 $18 / 7 天 $55 / 月 $220 的 Design Plan credits）只在其控制面可读，推理密钥被拒，所以插件不含凭据：`opendesign` 卡片显示的是**厂商公布窗口的本地估算**已用/剩余，用量按 credits 计价（模型官方价 × 厂商倍率：Flash 0.5×、Eco 0.27×），不是厂商自己的计数器；DeepSeek 空闲价减半，空闲时段的已用值最多高出一倍。
 
 ## License
 

@@ -71,13 +71,21 @@ test("discoverPlans: minimax-cn is deduped against an explicit minimax plan", ()
   assert.equal(autoPlans.length, 0);
 });
 
-test("discoverPlans: opendesign yields a token plan, not a quota card it cannot fill", () => {
-  // OpenDesign's allowance is readable only on a control plane that refuses an
-  // inference key, so an automatic code plan would render empty limit rows.
+test("discoverPlans: opendesign yields the vendor's window caps, not a blank card", () => {
+  // The card shows the vendor's published Design Plan windows; a plan row
+  // without caps would render an empty quota card.
   const { autoPlans, autoDiscovered } = discoverPlans(["opendesign"]);
   assert.equal(autoPlans.length, 1);
-  assert.equal(autoPlans[0].provider, "opendesign");
-  assert.equal(autoPlans[0].type, "token");
-  assert.equal(autoPlans[0].label, "OpenDesign");
+  const plan = autoPlans[0];
+  assert.equal(plan.provider, "opendesign");
+  assert.equal(plan.type, "code");
+  assert.equal(plan.label, "OpenDesign");
+  assert.deepEqual(
+    { "5h": plan.quota.dollarsPer5h, week: plan.quota.dollarsPerWeek, month: plan.quota.dollarsPerMonth },
+    { "5h": 18, week: 55, month: 220 },
+  );
+  // Go is the default tier and the only one billed $10/month here.
+  assert.equal(plan.subscription.amount, 10);
+  assert.deepEqual(plan.tiers.map((tier) => tier.name), ["Go", "Plus", "Pro", "Max"]);
   assert.equal(autoDiscovered[0].provider, "opendesign");
 });

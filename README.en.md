@@ -26,7 +26,7 @@ A **floating usage widget** pinned to the bottom-right corner of the dsh Web UI:
 - 🖱️ **Three-level interaction**: persistent floating pill → hover summary preview → click for a four-tab dashboard
 - 📊 **Multi-dimensional stats**: by provider / model / hour / day / session / working directory / recent calls, plus performance metrics (TTFT, generation speed)
 - 📈 **Time-series charts**: today hour-by-hour, 24h/72h/7d curves, 52-week activity heatmap
-- 🏷️ **Auto-detected billing plans**: built-in knowledge base (19 providers / 143 model rate cards), distinguishes subscription (Code) from pay-as-you-go (Token)
+- 🏷️ **Auto-detected billing plans**: built-in knowledge base (19 providers / 145 model rate cards), distinguishes subscription (Code) from pay-as-you-go (Token)
 - 🔴 **Live quota & balance**: 9 built-in adapters (7 quota + 2 balance) showing the vendor's real reported values, fail-safe fallback, never crashes
 - ⚡ **DeepSeek peak/off-peak pricing**: since 8/17 each call is priced by its own timestamp (peak/off-peak schedule)
 - 💱 **$ / ¥ currency switch**: live USD→CNY quote (falls back to `usdCnyRate`, default 7.2)
@@ -60,7 +60,7 @@ A **floating usage widget** pinned to the bottom-right corner of the dsh Web UI:
 
 ## Provider auto-detection (zero configuration)
 
-The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, verified against the vendors' official docs) covering **19 providers / 143 model rate cards**. Provider ids are normalized through an alias table (`glm`→zhipu, `kimi`→moonshot, `dashscope`→qwen, `gemini`→google, `grok`→xai, `claude`→anthropic, `copilot`→github-copilot, `minimax-cn`→minimax, `deepseek-official`→deepseek, …). Providers that appear in your session logs are **matched automatically** (badged "auto" in the UI); an explicit `plans` / `pricing` config always overrides auto-detection.
+The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, verified against the vendors' official docs) covering **19 providers / 145 model rate cards**. Provider ids are normalized through an alias table (`glm`→zhipu, `kimi`→moonshot, `dashscope`→qwen, `gemini`→google, `grok`→xai, `claude`→anthropic, `copilot`→github-copilot, `minimax-cn`→minimax, `deepseek-official`→deepseek, …). Providers that appear in your session logs are **matched automatically** (badged "auto" in the UI); an explicit `plans` / `pricing` config always overrides auto-detection.
 
 ### Subscription (Code) plans — auto-detected with fees and quotas
 
@@ -75,6 +75,7 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 | ClinePass (`clinepass`) | official plan | — | **Live quota** (official `api.cline.bot/v1/users/me/plan/usage-limits`: 5h/weekly/monthly percent + reset; credential seam `CLINEPASS_API_KEY`) |
 | Command Code (`commandcode`) | official plan (Go / GOAT / Pro / Max) | — | **Live quota, no credential in the plugin** (undocumented `api.commandcode.ai/alpha/billing/credits`): Bifrost fetches it with its own key through a dedicated `commandcode-billing` provider block, and `scripts/commandcode-usage.py` copies the windows out of Bifrost's request log. 5h + weekly come straight from the payload; the monthly credit pool is `pool - credits.monthlyCredits` with the pool read from the vendor's published plan table, keyed by the rolling caps (GOAT 14/35 -> 70 credits) |
 | Google AI / Gemini CLI (`google-ai-sub`) | AI Pro $19.99/mo | AI Pro / Ultra 5x $99.99 / Ultra 20x $199.99 | no public usage endpoint; shows the official daily caps (1,500 / 2,000 req/day) |
+| OpenDesign (`opendesign`) | Go $10/mo | Go / Plus $20 / Pro $100 / Max $200 | **Locally estimated quota, no credential in the plugin**: the allowance is readable only on the control plane, which refuses an inference key, so the card prices the calls on its two gateway routes in credits (the vendor's Design Plan multiplier: 0.5× for Flash, 0.27× for Eco) and shows used/remaining against the vendor's published windows — Go is $18 / 5 hours, $55 / 7 days, $220 / month, and Plus and above carry the 7-day and monthly windows only |
 
 ### Pay-as-you-go (Token) plans — auto-priced with official rates
 
@@ -85,7 +86,6 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 | Google (`google`) | gemini-3.7/3.6/3.5 flash, 3.1-pro, 2.5 pro/flash/lite |
 | xAI (`xai`) | grok-4.6, 4.5, 4.3, build-0.1 |
 | Mistral (`mistral`) | large-3, medium-3.5, small-4, ministral-3, deepseek-v4-1-flash-1017 |
-| OpenDesign (`opendesign`) | deepseek-v4.1-flash, deepseek-v4.1-flash-eco (a subscription; its card counts the calls made through those two gateway routes) |
 | Moonshot (`moonshot`) | kimi-k3, k2.7-code |
 | Zhipu (`zhipu`) | glm-5.2, 5.1, 5 |
 | Alibaba (`qwen`) | qwen3.8-max, 3.7-max/plus/flash |
@@ -96,7 +96,7 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 
 **Gateway routes**: Bifrost calls arrive under provider `bifrost` with the client route id as the model, so the route `mistral/deepseek-mistral` (and its bare alias `deepseek-mistral`) is priced from Mistral's card for `deepseek-v4-1-flash-1017` at $0.30 input, $0.007 cached input, $1.20 output per million tokens and no cache-write fee; the route carries no subscription, no quota and no credential.
 
-The same route table claims OpenDesign's two routes (`opendesign/deepseek-opendesign`, `opendesign/deepseek-eco`): the first is priced from `deepseek-v4.1-flash` at DeepSeek's official peak rates ($0.30 input, $0.006 cached input, $1.20 output per million tokens), the second at the vendor's published 0.27× Eco rate ($0.081 / $0.00162 / $0.324). The vision toolkit reaches the same gateway under its own client id `vision-toolkit-bifrost`, where both routes are priced the same way. DeepSeek's off-peak rate is half the peak rate, so an estimate for off-peak calls can be up to twice the real value.
+The same route table claims OpenDesign's two routes (`opendesign/deepseek-opendesign`, `opendesign/deepseek-eco`) in **credits** — DeepSeek's official Flash peak rate times the vendor's Design Plan multiplier: 0.5× for the regular route ($0.15 input, $0.003 cached input, $0.60 output per million tokens) and 0.27× for the Eco route ($0.081 / $0.00162 / $0.324). That is the unit the plan's windows are quoted in, so the card's dollar rows compare directly with Go's $18 / 5 hours, $55 / 7 days and $220 / month. The vision toolkit reaches the same gateway under its own client id `vision-toolkit-bifrost`, where both routes are priced the same way. DeepSeek's off-peak rate is half the peak rate, so an off-peak call consumes half these credits and the estimate for one runs up to twice its real credit value.
 
 ### Live quota & balance (vendor-direct)
 
@@ -190,12 +190,17 @@ config:
       type: token
       routes:              # gateway route ids whose calls count for this plan
         - mistral/deepseek-mistral
-    - provider: opendesign # a subscription vendor reached through two gateway routes
+    - provider: opendesign # a subscription vendor whose allowance stays on its control plane
       label: OpenDesign
-      type: token
-      routes:
+      type: code
+      routes:              # calls on these routes count into the windows below
         - opendesign/deepseek-opendesign
         - opendesign/deepseek-eco
+      quota:               # the vendor's published Design Plan windows (Go tier)
+        dollarsPer5h: 18
+        dollarsPerWeek: 55
+        dollarsPerMonth: 220
+        note: Go figures; Plus/Pro/Max carry the 7-day and monthly windows only — change these three numbers
   usageEndpoints:          # extra live quota endpoints; the built-in adapters need none
     - provider: my-vendor  # a provider without a built-in adapter
       url: https://api.example.com/v1/usage
@@ -272,7 +277,7 @@ dsh-spend/
 - Billing is an estimate, not an invoice; cache reads are priced at the cache-hit rate.
 - Sessions whose logs fail to decode are counted in `decodeErrors` and shown in the footer.
 - The Codex/Claude/Copilot quota endpoints are non-public / reverse-engineered and may change at any time; the adapters degrade gracefully (reason shown, fall back to local quota rows) and never crash.
-- OpenDesign's own allowance (Design Plan credits, $18 per 5 hours / $55 per 7 days / $220 per month on Go) is readable only on its control plane, which refuses an inference key. The plugin therefore holds no credential and shows no remaining allowance: the `opendesign` card sums the calls on its two routes at the vendor rates. Credits are model usage × the vendor multiplier (0.5× for Flash, 0.27× for Eco), so those figures are not directly comparable to the window caps.
+- OpenDesign's allowance (Design Plan credits: $18 per 5 hours, $55 per 7 days, $220 per month on Go) is readable only on its control plane, which refuses an inference key, so the plugin holds no credential and the `opendesign` card shows a **local estimate against the vendor's published windows**: calls on its two routes are priced in credits (model rate × the vendor multiplier — 0.5× for Flash, 0.27× for Eco), not read from the vendor's counters. DeepSeek halves its rate off-peak, so an off-peak window's used figure runs up to twice its real credit value.
 
 ## License
 

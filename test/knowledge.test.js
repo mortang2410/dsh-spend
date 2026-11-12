@@ -70,3 +70,14 @@ test("discoverPlans: minimax-cn is deduped against an explicit minimax plan", ()
   const { autoPlans } = discoverPlans(["minimax-cn", "minimax"], [{ provider: "minimax", type: "code" }]);
   assert.equal(autoPlans.length, 0);
 });
+
+test("discoverPlans: opendesign yields a token plan, not a quota card it cannot fill", () => {
+  // OpenDesign's allowance is readable only on a control plane that refuses an
+  // inference key, so an automatic code plan would render empty limit rows.
+  const { autoPlans, autoDiscovered } = discoverPlans(["opendesign"]);
+  assert.equal(autoPlans.length, 1);
+  assert.equal(autoPlans[0].provider, "opendesign");
+  assert.equal(autoPlans[0].type, "token");
+  assert.equal(autoPlans[0].label, "OpenDesign");
+  assert.equal(autoDiscovered[0].provider, "opendesign");
+});

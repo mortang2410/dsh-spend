@@ -75,8 +75,10 @@ test("the bare alias deepseek-mistral resolves to the same card", () => {
 
 test("route rows are scoped to the gateway provider", () => {
   const rows = autoRatesFor("bifrost");
-  assert.equal(rows.length, 2);
-  assert.deepEqual(rows.map((row) => row.model).sort(), ["deepseek-mistral", "mistral/deepseek-mistral"]);
+  assert.deepEqual(
+    rows.map((row) => row.model).sort(),
+    ["deepseek-mistral", "mistral/deepseek-mistral", "opendesign/deepseek-eco", "opendesign/deepseek-opendesign"],
+  );
   for (const row of rows) {
     assert.equal(row.provider, "bifrost");
     assert.equal(row.auto, true);
@@ -94,16 +96,69 @@ test("a Mistral sample of the same model prices identically", () => {
   assert.equal(price.outputPerMillion, 1.2);
 });
 
-test("every registered route names a vendor rate card with the documented rates", () => {
+test("an opendesign provider id prices the vendor's own model ids", () => {
+  // Same card as the routes, reached without a gateway: discovery emits one
+  // row per knowledge rate for a provider whose models appear in the logs.
+  const rows = autoRatesFor("opendesign");
+  assert.deepEqual(rows.map((row) => row.model).sort(), ["deepseek-v4.1-flash", "deepseek-v4.1-flash-eco"]);
+  for (const row of rows) {
+    assert.equal(row.provider, "opendesign");
+    assert.equal(row.auto, true);
+  }
+  const price = resolvePrice("deepseek-v4.1-flash", "opendesign", assemble(["opendesign"]), defaultPricing);
+  assert.equal(price.inputPerMillion, 0.3);
+  assert.equal(price.outputPerMillion, 1.2);
+  assert.equal(price.cacheReadPerMillion, 0.006);
+});
+
+test("every registered route names a vendor rate card that prices it", () => {
   for (const [gateway, routes] of Object.entries(GATEWAY_ROUTES)) {
-    assert.equal(gateway, "bifrost");
-    for (const target of Object.values(routes)) {
+    const pricing = assemble([gateway]);
+    for (const [routeId, target] of Object.entries(routes)) {
       const row = PROVIDER_KNOWLEDGE[target.provider]?.rates?.find((rate) => rate.model === target.model);
       assert.notEqual(row, undefined, `${target.provider}/${target.model} has no rate row`);
-      assert.equal(row.inputPerMillion, 0.3);
-      assert.equal(row.cacheReadPerMillion, 0.007);
-      assert.equal(row.cacheWritePerMillion, 0);
-      assert.equal(row.outputPerMillion, 1.2);
+      // The emitted row carries the LOGGED provider id and the route id, so it
+      // matches the samples the gateway writes.
+      const emitted = pricing.find((candidate) => candidate.provider === gateway && candidate.model === routeId);
+      assert.notEqual(emitted, undefined, `${gateway} has no row for ${routeId}`);
+      assert.deepEqual(
+        {
+          input: emitted.inputPerMillion,
+          output: emitted.outputPerMillion,
+          cacheRead: emitted.cacheReadPerMillion,
+          cacheWrite: emitted.cacheWritePerMillion,
+        },
+        {
+          input: row.inputPerMillion,
+          output: row.outputPerMillion,
+          cacheRead: row.cacheReadPerMillion,
+          cacheWrite: row.cacheWritePerMillion,
+        },
+        `${gateway}:${routeId}`,
+      );
+    }
+  }
+});
+
+test("opendesign routes price from the OpenDesign card on both gateway client ids", () => {
+  const cards = {
+    "opendesign/deepseek-opendesign": { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 },
+    "opendesign/deepseek-eco": { input: 0.081, output: 0.324, cacheRead: 0.00162, cacheWrite: 0 },
+  };
+  for (const gateway of ["bifrost", "vision-toolkit-bifrost"]) {
+    const pricing = assemble([gateway]);
+    for (const [routeId, expected] of Object.entries(cards)) {
+      const price = resolvePrice(routeId, gateway, pricing, defaultPricing);
+      assert.deepEqual(
+        {
+          input: price.inputPerMillion,
+          output: price.outputPerMillion,
+          cacheRead: price.cacheReadPerMillion,
+          cacheWrite: price.cacheWritePerMillion,
+        },
+        expected,
+        `${gateway}:${routeId}`,
+      );
     }
   }
 });

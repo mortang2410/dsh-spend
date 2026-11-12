@@ -1,6 +1,6 @@
 # dsh-spend bundle patch — inserts the `usage-stats` row into the profile.
 #
-# The plugin ships a built-in provider knowledge base (17 providers / 131
+# The plugin ships a built-in provider knowledge base (19 providers / 143
 # models, lib/knowledge.js): pricing and billing plans are auto-detected, so
 # no config is required. To override anything, add a row with the same id
 # (`usage-stats`) to your profile's cordis.patch.yml — the user layer is

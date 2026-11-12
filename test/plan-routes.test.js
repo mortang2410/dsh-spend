@@ -118,3 +118,30 @@ test("a plan without a label keeps the provider as its title", () => {
   });
   assert.equal(blank.plans[0].label, null);
 });
+
+test("quota windows are trailing intervals, so a call older than the window drops out", () => {
+  // The documented limit of the local estimate: windows end at `now` rather
+  // than at the vendor's own reset anchor, so the week row is a trailing 7
+  // days and the month row a trailing 30 days. A call outside a window must
+  // stop counting in it.
+  const t = Date.now();
+  const at = (msAgo) => ({ ...routeSample("opendesign/deepseek-opendesign", 1_000_000), time: t - msAgo });
+  const stats = buildStats(
+    [at(6 * 86400e3), at(8 * 86400e3)],
+    pricing,
+    defaultPricing,
+    {
+      plans: [{
+        provider: "opendesign",
+        type: "code",
+        routes: ["opendesign/deepseek-opendesign"],
+        quota: { dollarsPerWeek: 55, dollarsPerMonth: 220 },
+      }],
+    },
+  );
+  const limits = Object.fromEntries((stats.plans[0].limits ?? []).map((limit) => [limit.window, limit]));
+  // Only the six-day-old call ($0.15 credit) is inside the trailing week.
+  assert.ok(Math.abs(limits.week.used - 0.15) < 1e-9, `week used=${limits.week.used}`);
+  // Both calls sit inside the trailing month.
+  assert.ok(Math.abs(limits.month.used - 0.3) < 1e-9, `month used=${limits.month.used}`);
+});

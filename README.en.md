@@ -27,7 +27,7 @@ A **floating usage widget** pinned to the bottom-right corner of the dsh Web UI:
 - 📊 **Multi-dimensional stats**: by provider / model / hour / day / session / working directory / recent calls, plus performance metrics (TTFT, generation speed)
 - 📈 **Time-series charts**: today hour-by-hour, 24h/72h/7d curves, 52-week activity heatmap
 - 🏷️ **Auto-detected billing plans**: built-in knowledge base (19 providers / 145 model rate cards), distinguishes subscription (Code) from pay-as-you-go (Token)
-- 🔴 **Live quota & balance**: 9 built-in adapters (7 quota + 2 balance) showing the vendor's real reported values, fail-safe fallback, never crashes
+- 🔴 **Live quota & balance**: 10 built-in adapters (8 quota + 2 balance) showing the vendor's real reported values, fail-safe fallback, never crashes
 - ⚡ **DeepSeek peak/off-peak pricing**: since 8/17 each call is priced by its own timestamp (peak/off-peak schedule)
 - 💱 **$ / ¥ currency switch**: live USD→CNY quote (falls back to `usdCnyRate`, default 7.2)
 - 📂 **Workspace filter**: scope every dimension to one project, drill down into subdirectories
@@ -277,7 +277,7 @@ dsh-spend/
 - Billing is an estimate, not an invoice; cache reads are priced at the cache-hit rate.
 - Sessions whose logs fail to decode are counted in `decodeErrors` and shown in the footer.
 - The Codex/Claude/Copilot quota endpoints are non-public / reverse-engineered and may change at any time; the adapters degrade gracefully (reason shown, fall back to local quota rows) and never crash.
-- OpenDesign's allowance (Design Plan credits: $18 per 5 hours, $55 per 7 days, $220 per month on Go) is readable only on its control plane, which refuses an inference key, so the plugin holds no credential and the `opendesign` card shows a **local estimate against the vendor's published windows**: calls on its two routes are priced in credits (model rate × the vendor multiplier — 0.5× for Flash, 0.27× for Eco), not read from the vendor's counters. DeepSeek halves its rate off-peak, so an off-peak window's used figure runs up to twice its real credit value.
+- OpenDesign's allowance (Design Plan credits: $18 per 5 hours, $55 per 7 days, $220 per month on Go) is readable only on its control plane, which refuses an inference key, so the plugin holds no credential and the `opendesign` card shows a **local estimate against the vendor's published windows**: calls on its two routes are priced in credits (model rate × the vendor multiplier — 0.5× for Flash, 0.27× for Eco), not read from the vendor's counters. DeepSeek halves its rate off-peak, so an off-peak window's used figure runs up to twice its real credit value. The windows are summed as **trailing** 5-hour / 7-day / 30-day intervals measured back from now, while the vendor's 7-day window starts at the subscription and resets every 7 days ([model-credits section 3](https://open-design.ai/model-credits/)); the plugin cannot read that reset anchor, so soon after a vendor reset the card can still count the previous window's spend — the remaining it shows is only ever an underestimate, never an overestimate.
 
 ## License
 

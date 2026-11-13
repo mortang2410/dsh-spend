@@ -269,9 +269,11 @@ test("an unfamiliar vendor status rides along without the limited badge", () => 
 });
 
 // The renderer lives in the shipped client bundle, which exports nothing, so the
-// badge is a named helper and these tests run the code itself. Comments are
-// stripped before matching, because a comment carrying a correct-looking helper
-// or row expression would otherwise satisfy a check whose subject is live code.
+// badge is a named helper and these tests run the code itself. Two passes read
+// the source: comments are removed first, and the body of every remaining
+// string, template and regex literal is then blanked. Text shaped like a helper
+// or a call is data inside a literal or a comment, and a check whose subject is
+// the code that runs must never accept it.
 function withoutComments(source) {
   let out = "";
   let at = 0;
@@ -288,6 +290,10 @@ function withoutComments(source) {
       if (source[at] === "\n") out += "\n";
       at++;
     }
+    // A slash-star that no closing star-slash follows means the scan lost its
+    // place (a regex literal such as /[/*]/ opens a comment for this pass).
+    // Refusing to finish beats dropping the rest of the file silently.
+    if (at >= length) throw new Error("unterminated block comment while stripping client.js");
     at += 2;
   }
 
@@ -367,22 +373,214 @@ function withoutComments(source) {
   return out;
 }
 
-const badgeDefinitions = (code) => [
-  ...code.matchAll(/\n\t\tfunction planStatusBadge\(([^)]*)\) \{([\s\S]*?)\n\t\t\}/g),
+// Blank the body of every string, template and regex literal in comment-free
+// source, keeping a template's `${expression}` parts and all delimiters as code,
+// and record each template literal's span. Length is preserved, so an offset
+// found in the skeleton slices the same text out of the source. A quote,
+// backtick or slash that turns out not to open a literal is kept as code, so a
+// misread can never eat more than one line: such literals cannot span a raw
+// newline.
+function lexClient(code) {
+  const skeleton = [];
+  const templates = [];
+  let at = 0;
+  const length = code.length;
+
+  const blank = (char) => (char === "\n" ? "\n" : " ");
+
+  function wordBefore(index) {
+    let start = index;
+    while (start >= 0 && /[A-Za-z0-9_$]/.test(code[start])) start--;
+    return code.slice(start + 1, index + 1);
+  }
+
+  function startsRegex() {
+    let previous = at - 1;
+    while (previous >= 0 && /\s/.test(code[previous])) previous--;
+    if (previous < 0) return true;
+    const char = code[previous];
+    if ("([{,;:=!&|?+-*%<>~^".includes(char)) return true;
+    if (/[A-Za-z0-9_$]/.test(char)) {
+      return /^(return|typeof|case|in|of|void|delete|instanceof|new|do|else|yield|await)$/.test(
+        wordBefore(previous),
+      );
+    }
+    return false;
+  }
+
+  function restore(start, mark) {
+    skeleton.length = mark;
+    for (const char of code.slice(start, at)) skeleton.push(char);
+  }
+
+  function string(quote) {
+    const start = at;
+    const mark = skeleton.length;
+    skeleton.push(code[at++]);
+    while (at < length) {
+      const char = code[at];
+      if (char === "\\") {
+        skeleton.push(code[at], blank(code[at + 1] ?? ""));
+        at += 2;
+        continue;
+      }
+      if (char === "\n") {
+        restore(start, mark);
+        return;
+      }
+      skeleton.push(char === quote ? char : blank(char));
+      at++;
+      if (char === quote) return;
+    }
+    restore(start, mark);
+  }
+
+  function regex() {
+    const start = at;
+    const mark = skeleton.length;
+    skeleton.push(code[at++]);
+    let inClass = false;
+    while (at < length) {
+      const char = code[at];
+      if (char === "\\") {
+        skeleton.push(code[at], blank(code[at + 1] ?? ""));
+        at += 2;
+        continue;
+      }
+      if (char === "\n") {
+        restore(start, mark);
+        return;
+      }
+      if (char !== "/" || inClass) {
+        if (char === "[") inClass = true;
+        else if (char === "]") inClass = false;
+        skeleton.push(blank(char));
+        at++;
+        continue;
+      }
+      skeleton.push(char);
+      at++;
+      while (at < length && /[a-z]/i.test(code[at])) {
+        skeleton.push(code[at]);
+        at++;
+      }
+      return;
+    }
+    restore(start, mark);
+  }
+
+  function template() {
+    const start = at;
+    skeleton.push(code[at++]);
+    while (at < length) {
+      const char = code[at];
+      if (char === "\\") {
+        skeleton.push(code[at], blank(code[at + 1] ?? ""));
+        at += 2;
+        continue;
+      }
+      if (char === "`") {
+        skeleton.push(char);
+        at++;
+        break;
+      }
+      if (char === "$" && code[at + 1] === "{") {
+        skeleton.push("$", "{");
+        at += 2;
+        expression();
+        skeleton.push("}");
+        continue;
+      }
+      skeleton.push(blank(char));
+      at++;
+    }
+    templates.push({ start, end: at });
+  }
+
+  function expression() {
+    let depth = 0;
+    while (at < length) {
+      const char = code[at];
+      if (char === '"' || char === "'") {
+        string(char);
+        continue;
+      }
+      if (char === "`") {
+        template();
+        continue;
+      }
+      if (char === "/" && startsRegex()) {
+        regex();
+        continue;
+      }
+      if (char === "{") depth++;
+      if (char === "}") {
+        if (depth === 0) {
+          at++;
+          return;
+        }
+        depth--;
+      }
+      skeleton.push(char);
+      at++;
+    }
+  }
+
+  while (at < length) {
+    const char = code[at];
+    if (char === '"' || char === "'") {
+      string(char);
+      continue;
+    }
+    if (char === "`") {
+      template();
+      continue;
+    }
+    if (char === "/" && startsRegex()) {
+      regex();
+      continue;
+    }
+    skeleton.push(char);
+    at++;
+  }
+
+  return { skeleton: skeleton.join(""), templates };
+}
+
+const badgeDefinitions = (skeleton) => [
+  ...skeleton.matchAll(/\n\t\tfunction planStatusBadge\(([^)]*)\) \{([\s\S]*?)\n\t\t\}/dg),
 ];
 
-const badgeCalls = (code) => [...code.matchAll(/\$\{\s*planStatusBadge\(t, w\)\s*\}/g)];
+const badgeRows = (skeleton, templates) =>
+  templates.filter(({ start, end }) => skeleton.slice(start, end).includes("planStatusBadge("));
 
-const readClientCode = () =>
-  withoutComments(readFileSync(new URL("../lib/client.js", import.meta.url), "utf8"));
+const compileRow = (code, row) =>
+  new Function(
+    "t",
+    "livePct",
+    "w",
+    "resetText",
+    "planStatusBadge",
+    `return ${code.slice(row.start, row.end)};`,
+  );
 
-test("the card shows the limited badge only for the rate-limited word", () => {
-  // A condition that degrades to truthiness fails on behaviour, not on wording.
-  const code = readClientCode();
-  const definitions = badgeDefinitions(code);
+const readClientSource = () =>
+  readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
+
+// Locate the helper and the usage row by code alone, then run both: the helper
+// against every status, and the row as the card would render it.
+function badgeCheck(source) {
+  const code = withoutComments(source);
+  const { skeleton, templates } = lexClient(code);
+  assert.equal(skeleton.length, code.length, "the skeleton must keep the source length");
+
+  const definitions = badgeDefinitions(skeleton);
   assert.equal(definitions.length, 1, "client.js must define planStatusBadge exactly once");
-  const [definition] = definitions;
-  const badge = new Function(...definition[1].split(",").map((name) => name.trim()), definition[2]);
+  const [, params, body] = definitions[0].indices;
+  const badge = new Function(
+    ...code.slice(...params).split(",").map((name) => name.trim()),
+    code.slice(...body),
+  );
   const t = (key) => key;
   assert.equal(badge(t, { vendorStatus: "rate-limited" }), " · plan.statusLimited");
   for (const window of [
@@ -395,20 +593,43 @@ test("the card shows the limited badge only for the rate-limited word", () => {
   ]) {
     assert.equal(badge(t, window), "", `no badge for ${JSON.stringify(window)}`);
   }
-  const calls = badgeCalls(code);
-  assert.equal(calls.length, 1, "the live window row must render through the helper exactly once");
-  const lineStart = code.lastIndexOf("\n", calls[0].index) + 1;
-  const rowLine = code.slice(lineStart, code.indexOf("\n", calls[0].index));
-  assert.match(rowLine, /plan\.usedShort/, "the helper call sits in the live usage row");
+
+  const rows = badgeRows(skeleton, templates);
+  assert.equal(rows.length, 1, "the card renders planStatusBadge in exactly one template");
+  assert.match(code.slice(rows[0].start, rows[0].end), /plan\.usedShort/, "that row is the live usage row");
+  return { badge, t, render: compileRow(code, rows[0]) };
+}
+
+test("the card shows the limited badge only for the rate-limited word", () => {
+  // A condition that degrades to truthiness fails on behaviour, not on wording,
+  // and the row is rendered rather than matched, so text shaped like a call
+  // cannot stand in for one.
+  const { badge, t, render } = badgeCheck(readClientSource());
+  const row = (window, resetText = null) => render(t, 100, window, resetText, badge);
+  assert.equal(row({ vendorStatus: "rate-limited" }), "plan.usedShort 100% · plan.statusLimited");
+  for (const window of [
+    {},
+    { vendorStatus: undefined },
+    { vendorStatus: null },
+    { vendorStatus: "" },
+    { vendorStatus: "ok" },
+    { vendorStatus: "quota-available" },
+  ]) {
+    assert.equal(row(window), "plan.usedShort 100%", `the live row badges ${JSON.stringify(window)}`);
+  }
+  assert.equal(
+    row({ vendorStatus: "rate-limited" }, "10:00"),
+    "plan.usedShort 100% · plan.statusLimited · plan.resetAt 10:00",
+    "the reset suffix still renders beside the badge",
+  );
 });
 
 test("a comment cannot stand in for the badge code", () => {
-  // The extraction above reads source text, so a comment carrying a correct
-  // helper or row expression must not count as the code that runs. This builds
-  // that decoy: a broad active helper with a correct-looking one commented out
-  // above it, and a row that suffixes the badge inline with the helper call in a
-  // trailing comment.
-  const source = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
+  // Both passes read source text, so a comment carrying a correct helper or row
+  // expression must not count as the code that runs. This decoy has a broad
+  // active helper with a correct-looking one commented out above it, and a row
+  // that suffixes the badge inline with the helper call in a trailing comment.
+  const source = readClientSource();
   const decoy = source
     .replace(
       '\n\t\tfunction planStatusBadge(t, window) {\n\t\t\treturn window?.vendorStatus === "rate-limited" ? ',
@@ -419,18 +640,50 @@ test("a comment cannot stand in for the badge code", () => {
       '${w.vendorStatus ? ` · ${t("plan.statusLimited")}` : ""} /* planStatusBadge(t, w) */',
     );
   assert.notEqual(decoy, source, "the decoy fixture must differ from client.js");
+  assert.throws(
+    () => badgeCheck(decoy),
+    /no badge for \{"vendorStatus":"ok"\}/,
+    "the active broad helper must fail the behaviour check",
+  );
+});
+
+test("text inside a literal cannot stand in for the badge code", () => {
+  // A template can carry the helper's own source, and a string can carry the
+  // row's call text, while the live row badges every status inline. Neither is
+  // code, so neither the definition nor the call site may be found there.
+  const source = readClientSource();
+  const decoy = source
+    .replace(
+      "\n\t\tfunction planStatusBadge(t, window) {",
+      '\n\t\tconst badgeDecoy = `\n\t\tfunction planStatusBadge(t, window) {\n\t\t\treturn window?.vendorStatus === "rate-limited" ? " · decoy" : "";\n\t\t}\n\t\t`;\n\t\tfunction unusedBadge(t, window) {',
+    )
+    .replace(
+      "${planStatusBadge(t, w)}",
+      '${w?.vendorStatus ? ` · ${t("plan.statusLimited")}` : ""}${"${planStatusBadge(t, w)}"}',
+    );
+  assert.notEqual(decoy, source, "the decoy fixture must differ from client.js");
+  assert.throws(
+    () => badgeCheck(decoy),
+    /must define planStatusBadge exactly once/,
+    "a template's text is not a definition",
+  );
 
   const code = withoutComments(decoy);
-  const definitions = badgeDefinitions(code);
-  assert.equal(definitions.length, 1, "only the active definition counts");
-  const badge = new Function(
-    ...definitions[0][1].split(",").map((name) => name.trim()),
-    definitions[0][2],
+  const { skeleton, templates } = lexClient(code);
+  assert.equal(badgeRows(skeleton, templates).length, 0, "a string's text is not a call site");
+});
+
+test("a slash-star inside a regex refuses to strip instead of hiding code", () => {
+  // The comment pass does not parse regex literals, so /[/*]/ opens a comment it
+  // can never close. That must fail loudly: a silent truncation would hide every
+  // definition, row and decoy that follows it from the checks above.
+  assert.throws(
+    () => withoutComments("const i = /[/*]/; const after = 1;"),
+    /unterminated block comment while stripping client\.js/,
   );
   assert.equal(
-    badge((key) => key, { vendorStatus: "quota-available" }),
-    " · plan.statusLimited",
-    "the extracted definition is the active broad one, so the badge test fails on this decoy",
+    withoutComments('const i = "/* not a comment */"; // gone\nconst after = 1;'),
+    'const i = "/* not a comment */"; \nconst after = 1;',
+    "a comment marker inside a string is text, and a real comment is still removed",
   );
-  assert.equal(badgeCalls(code).length, 0, "the row's comment must not satisfy the call-site check");
 });

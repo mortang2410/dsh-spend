@@ -523,7 +523,7 @@ const cardSnapshot = (providerUsage) => ({
 });
 
 /** Render the shipped card against one vendor payload and return its plan rows. */
-async function renderCard(source, windows) {
+async function renderCard(source, windows, globals = {}) {
   const definitions = [];
   const sandbox = {
     window: { __ModuleLoader__: { load: (definition) => definitions.push(definition) } },
@@ -541,6 +541,7 @@ async function renderCard(source, windows) {
     setInterval: () => 0,
     clearInterval() {},
     console,
+    ...globals,
   };
   runInNewContext(source, sandbox);
   assert.equal(definitions.length, 1, "client.js registers one module definition");
@@ -580,6 +581,13 @@ const liveWindows = (overrides = {}) => ({
 });
 
 const expectRateLimitedBadge = (rows) => {
+  const rolling = rows.filter((row) => row.startsWith("plan.window5h"));
+  assert.equal(rolling.length, 1, `the card renders one 5-hour row, got ${JSON.stringify(rows)}`);
+  assert.equal(
+    rolling[0],
+    "plan.window5hplan.usedShort 0%",
+    "a 5-hour window the vendor did not limit carries no badge",
+  );
   const week = rows.filter((row) => row.startsWith("plan.windowWeek"));
   assert.equal(week.length, 1, `the card renders one 7-day row, got ${JSON.stringify(rows)}`);
   assert.equal(
@@ -595,7 +603,6 @@ const expectRateLimitedBadge = (rows) => {
 // The row's own template, verbatim. A fixture that no longer matches the bundle
 // fails loudly instead of quietly replacing nothing.
 const LIVE_ROW = '`${t("plan.usedShort")} ${livePct}%${planStatusBadge(t, w)}${resetText !== null ? ` · ${t("plan.resetAt")} ${resetText}` : ""}`';
-const TRUTHY_ROW = '`${t("plan.usedShort")} ${livePct}%${w?.vendorStatus ? ` · ${t("plan.statusLimited")}` : ""}${resetText !== null ? ` · ${t("plan.resetAt")} ${resetText}` : ""}`';
 
 test("the card paints the 7-day row and badges only the rate-limited word", async () => {
   const source = readClientSource();
@@ -608,6 +615,16 @@ test("the card paints the 7-day row and badges only the rate-limited word", asyn
   );
   assert.deepEqual(neutral.filter((row) => row.startsWith("plan.windowWeek")), [
     "plan.windowWeekplan.usedShort 100%",
+  ]);
+  // The 5-hour row is checked in both directions too: an unrelated window that
+  // the vendor does limit earns the same badge, so the row's status is what
+  // decides it rather than the row's position in the card.
+  const rollingBadged = await renderCard(
+    source,
+    liveWindows({ rolling: { status: "rate-limited", percent: 0 } }),
+  );
+  assert.deepEqual(rollingBadged.filter((row) => row.startsWith("plan.window5h")), [
+    "plan.window5hplan.usedShort 0% · plan.statusLimited",
   ]);
 });
 
@@ -627,14 +644,16 @@ test("an uncalled jsx decoy cannot stand in for the row the card paints", async 
   const source = readClientSource();
   // The decoy is a function that is never called and whose JSX child is the
   // live row template character for character: a check that locates the row by
-  // source text finds this one. The rendered card shows it never runs.
-  const withDecoy = source.replace(HELPER_FULL, HELPER_FULL + DECOY_ROW);
+  // source text finds this one. The rendered card shows it never runs. Every
+  // copy of the helper is rewritten, so a duplicate earlier in the file cannot
+  // absorb the fixture and leave the live helper untouched.
+  const withDecoy = source.replaceAll(HELPER_FULL, HELPER_FULL + DECOY_ROW);
   assert.notEqual(withDecoy, source, "the dead-decoy fixture must apply to client.js");
   expectRateLimitedBadge(await renderCard(withDecoy, liveWindows()));
 
   // The same fixture over a live helper that degrades to truthiness badges an
   // unfamiliar status, and the check that passed above must fail.
-  const broadHelper = withDecoy.replace(HELPER_CONDITION, "window?.vendorStatus");
+  const broadHelper = withDecoy.replaceAll(HELPER_CONDITION, "window?.vendorStatus");
   assert.notEqual(broadHelper, withDecoy, "the broad-helper fixture must apply to client.js");
   const rows = await renderCard(broadHelper, liveWindows());
   assert.throws(
@@ -644,24 +663,35 @@ test("an uncalled jsx decoy cannot stand in for the row the card paints", async 
   );
 });
 
+const ROW_CHILD_HELPER = "children: `${liveUsedText(";
+
 test("a helper-backed row child still renders the badge", async () => {
   // Behaviour-preserving refactor: the same text built by a helper instead of
   // an inline template beside `children:`. A text matcher rejects this; the
   // rendered card must not care.
   const source = readClientSource();
-  const refactored = source.includes("liveUsedText(")
-    ? source
-    : source
-        .replace(
-          HELPER_HEAD,
-          '\n\t\tfunction liveUsedText(t, livePct, w, resetText) {\n\t\t\treturn ' +
-            LIVE_ROW +
-            ";\n\t\t}" +
-            HELPER_HEAD,
-        )
-        .replace(LIVE_ROW, '`${liveUsedText(t, livePct, w, resetText)}`');
-  if (refactored !== source) {
-    assert.equal(refactored.split("liveUsedText(").length - 1, 2, "the helper is defined and called once");
+  if (source.includes(ROW_CHILD_HELPER)) {
+    // The shipped row already builds its child through a helper.
+    expectRateLimitedBadge(await renderCard(source, liveWindows()));
+    return;
   }
-  expectRateLimitedBadge(await renderCard(refactored, liveWindows()));
+  // Every copy of the row template is rewritten, so a duplicate — in a comment,
+  // a string, or a dead function — cannot absorb the fixture and leave the row
+  // the card paints inline. The helper counts its calls, and the card has to
+  // reach it: a rewrite that landed anywhere else leaves the count at zero.
+  let calls = 0;
+  const refactored = source.replaceAll(
+    LIVE_ROW,
+    "liveUsedText(t, livePct, w, resetText, " + LIVE_ROW + ")",
+  );
+  assert.notEqual(refactored, source, "the helper-backed fixture must find the row template");
+  expectRateLimitedBadge(
+    await renderCard(refactored, liveWindows(), {
+      liveUsedText: (t, livePct, w, resetText, text) => {
+        calls += 1;
+        return text;
+      },
+    }),
+  );
+  assert.ok(calls > 0, "the card's row child must be built by the helper");
 });

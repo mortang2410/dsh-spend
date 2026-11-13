@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zstdCompressSync } from "node:zlib";
@@ -248,4 +249,30 @@ test("a window with no percent keeps its vendor status and no measurement", () =
     "opencode-go",
   );
   assert.deepEqual(usage.windows.week, { status: "error", percent: null });
+});
+
+test("a measured window with no status invents no vendor word", () => {
+  // An absent status is not evidence that the vendor limited the window, so
+  // the card must not claim it did.
+  const usage = normalizeProviderUsage({ usage: { weekly: { percent: 50 } } }, "opencode-go");
+  assert.deepEqual(usage.windows.week, { status: "ok", percent: 50 });
+  assert.equal(usage.windows.week.vendorStatus, undefined);
+});
+
+test("an unfamiliar vendor status rides along without the limited badge", () => {
+  const usage = normalizeProviderUsage(
+    { usage: { weekly: { status: "quota-available", percent: 50 } } },
+    "opencode-go",
+  );
+  assert.equal(usage.windows.week.vendorStatus, "quota-available");
+  assert.notEqual(usage.windows.week.vendorStatus, "rate-limited");
+});
+
+test("the card shows the limited badge only for the rate-limited word", () => {
+  // The renderer lives in the shipped client bundle, so the gate is pinned
+  // where it is written: the badge must test the exact word, not the presence
+  // of any vendor status.
+  const source = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
+  assert.match(source, /w\.vendorStatus === "rate-limited" \?/);
+  assert.doesNotMatch(source, /w\.vendorStatus !== undefined \?/);
 });

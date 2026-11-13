@@ -29,7 +29,7 @@
 - 📊 **多维统计**：按提供商 / 模型 / 小时 / 天 / 会话 / 工作目录 / 最近调用，含性能指标（TTFT、生成速度）
 - 📈 **时间序列图表**：今日逐小时、24h/72h/7d 时间曲线、52 周活跃热力图
 - 🏷️ **计费计划自动识别**：内置知识库（19 供应商 / 145 模型价格），自动区分订阅制（Code）与按量（Token）
-- 🔴 **实时额度 / 余额直读**：10 家订阅商内置适配器（额度 8 + 余额 2），展示厂商接口返回的真实值，失败安全回退不崩溃
+- 🔴 **实时额度 / 余额直读**：11 家订阅商内置适配器（额度 9 + 余额 2），展示厂商接口返回的真实值，失败安全回退不崩溃
 - ⚡ **DeepSeek 峰谷计价**：8/17 起按调用时刻自动按高峰/空闲价计费
 - 💱 **$ / ¥ 货币切换**：实时汇率（失败回退 `usdCnyRate`，默认 7.2）
 - 📂 **工作区筛选**：按项目限定全部统计口径，支持逐级下钻子目录
@@ -77,7 +77,7 @@
 | ClinePass（`clinepass`） | 官方套餐 | — | **实时额度**（官方 `api.cline.bot/v1/users/me/plan/usage-limits`：300 分钟/周/月 已用百分比 + 重置时间；凭据缝 `CLINEPASS_API_KEY`） |
 | Command Code（`commandcode`） | 官方套餐（Go / GOAT / Pro / Max） | — | **实时额度，插件内无任何凭据**（未公开的 `api.commandcode.ai/alpha/billing/credits`）：Bifrost 用专用 `commandcode-billing` provider 块以自己的密钥抓取，`scripts/commandcode-usage.py` 再从请求日志取出各窗口。5h/周直接来自载荷；月额度用 `池子 - credits.monthlyCredits` 计算，池子取自厂商公布的套餐表，按滚动上限识别（GOAT 14/35 → 70 credits） |
 | Google AI / Gemini CLI（`google-ai-sub`） | AI Pro $19.99/月 | AI Pro / Ultra 5x $99.99 / Ultra 20x $199.99 | 无公开用量接口，按官方每日上限（1,500 / 2,000 请求/天）展示 |
-| OpenDesign（`opendesign`） | Go $10/月 | Go / Plus $20 / Pro $100 / Max $200 | **本地估算额度，插件内无任何凭据**：额度只在控制面可读，推理密钥被拒，故卡片把两条网关路由的调用按厂商 Design Plan 倍率折算成 credits（Flash 0.5×、Eco 0.27×），对厂商公布的窗口显示已用/剩余——Go 为 5 小时 $18 / 7 天 $55 / 月 $220，Plus 及以上只有 7 天与月窗口 |
+| OpenDesign（`opendesign`） | Go $10/月 | Go / Plus $20 / Pro $100 / Max $200 | **厂商计数器直读，插件内无凭据**：额度只在控制面可读、推理密钥被拒，适配器改用 `od-login` 存下的控制面密钥（`~/.config/opendesign/control-key`，0600）读厂商 preflight，显示每窗口的 limit / 已用 / 剩余 / 重置时间（Go 为 5 小时 $18 与 7 天 $55，Plus 及以上只有 7 天）；密钥缺失或控制面失败时回退本地估算——两条网关路由按 Design Plan 倍率折算成 credits（Flash 0.5×、Eco 0.27×），对 5 小时 $18 / 7 天 $55 / 月 $220 显示已用/剩余 |
 
 ### 按量计费（Token 计划）— 自动带官方价
 
@@ -210,7 +210,7 @@ config:
       timeoutMs: 15000               # 可选：超时毫秒
 ```
 
-> **实时额度/余额**：Code 计划按内置适配器（`lib/providers/`）直读订阅商接口——opencode-go 与 commandcode（两者都从 Bifrost 自己抓到的请求日志里复制，插件内不含凭据）、openai-codex（本机 `~/.codex/auth.json`）、claude-sub（`~/.claude/.credentials.json`）、github-copilot（`GH_TOKEN`/`GITHUB_TOKEN`/`gh` 配置）、zhipu（`ZHIPU_API_KEY`）、minimax（`MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`）、clinepass（`CLINEPASS_API_KEY`）；卡片显示各窗口实际百分比与重置时间。Token 计划余额直读：deepseek（`DEEPSEEK_API_KEY`）、moonshot（`MOONSHOT_API_KEY`）。`usageEndpoints` 可覆盖内置地址/超时，或为自定义供应商走通用 Bearer-key 通道（`<PROVIDER>_API_KEY`）。仅当登录态缺失、超时或非 200 时回退本地配额行并提示原因。
+> **实时额度/余额**：Code 计划按内置适配器（`lib/providers/`）直读订阅商接口——opencode-go 与 commandcode（两者都从 Bifrost 自己抓到的请求日志里复制，插件内不含凭据）、opendesign（`scripts/opendesign-usage.py` 用 `od-login` 存在 `~/.config/opendesign/control-key` 的控制面密钥读厂商 preflight，插件内同样不含凭据）、openai-codex（本机 `~/.codex/auth.json`）、claude-sub（`~/.claude/.credentials.json`）、github-copilot（`GH_TOKEN`/`GITHUB_TOKEN`/`gh` 配置）、zhipu（`ZHIPU_API_KEY`）、minimax（`MINIMAX_API_KEY`，兜底 `MINIMAX_CN_API_KEY`）、clinepass（`CLINEPASS_API_KEY`）；卡片显示各窗口实际百分比与重置时间。Token 计划余额直读：deepseek（`DEEPSEEK_API_KEY`）、moonshot（`MOONSHOT_API_KEY`）。`usageEndpoints` 可覆盖内置地址/超时，或为自定义供应商走通用 Bearer-key 通道（`<PROVIDER>_API_KEY`）。仅当登录态缺失、超时或非 200 时回退本地配额行并提示原因。
 
 > **网关代取的额度（opencode-go / commandcode）**：这两家的用量接口都要厂商密钥，而密钥只留在 Bifrost。Bifrost 为它们各配了一个专用 provider 块（`opencode-go-billing` / `commandcode-billing`），把该块的 `list_models` 路径重写到用量地址；插件这一侧的 helper 只是让网关刷新一次（本机无密钥的 `GET /v1/models`），再从 `~/.config/bifrost/logs.db` 里取最新一条带载荷的记录。刷新失败时保留上一条好记录，卡片不会清空。`usageEndpoints` 的通用 Bearer-key 通道则会把厂商密钥放进 DSH，只在该主机允许时才用。
 
@@ -279,7 +279,7 @@ dsh-spend/
 - 计费为估算值，不是账单；缓存读按命中单价计费。
 - 日志解码失败的会话会计入 `decodeErrors` 并在页脚提示。
 - Codex/Claude/Copilot 额度接口为非公开/逆向接口，可能随时失效；适配器已做失败降级（显示原因并回退本地配额行），不会崩溃。
-- OpenDesign 的额度（Go 档 5 小时 $18 / 7 天 $55 / 月 $220 的 Design Plan credits）只在其控制面可读，推理密钥被拒，所以插件不含凭据：`opendesign` 卡片显示的是**厂商公布窗口的本地估算**已用/剩余，用量按 credits 计价（模型官方价 × 厂商倍率：Flash 0.5×、Eco 0.27×），不是厂商自己的计数器；DeepSeek 空闲价减半，空闲时段的已用值最多高出一倍。这些窗口按**从当前时刻往前推**的 5 小时 / 7 天 / 30 天区间累计，而厂商的 7 天窗口从订阅开始日算起、每 7 天重置（[model-credits 第 3 节](https://open-design.ai/model-credits/)），插件读不到该重置锚点，所以在厂商刚重置之后，卡片仍可能把上一个窗口的花费算作已用。两处缺口会把数字推向相反方向：保留重置前的调用只会让本地剩余偏少；而本机日志之外的用量（OpenDesign 桌面端、其他设备、同一账号的其他 API key 共用这些 credits 与窗口）在卡片里看不到，会让显示的剩余多于账号实际剩余。
+- OpenDesign 的额度（Design Plan credits）直读厂商控制面：`scripts/opendesign-usage.py` 只读取 `od-login` 存在 `~/.config/opendesign/control-key`（0600）的控制面密钥，自身不含凭据、也不打印密钥；卡片显示 preflight 返回的每窗口 limit / 已用 / 剩余 / 重置时间，Go 档是 5 小时 $18 与 7 天 $55，Plus / Pro / Max 只有 7 天窗口，载荷里没有的窗口不臆造。没有密钥或控制面报错时回退本地估算：用量按 credits 计价（模型官方价 × 厂商倍率：Flash 0.5×、Eco 0.27×），窗口按**从当前时刻往前推**的 5 小时 / 7 天 / 30 天区间累计，而厂商 7 天窗口从订阅开始日算起、每 7 天重置（[model-credits 第 3 节](https://open-design.ai/model-credits/)），所以刚重置之后估算仍可能把上一个窗口的花费算作已用；空闲时段 DeepSeek 价格减半，估算最多高出一倍。直读模式没有这两处缺口，看到的还包括 OpenDesign 桌面端与同一账号其他 API key 的用量。
 
 ## License
 

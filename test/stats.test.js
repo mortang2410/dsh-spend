@@ -401,7 +401,9 @@ function lexClient(code) {
     const char = code[previous];
     if ("([{,;:=!&|?+-*%<>~^".includes(char)) return true;
     if (/[A-Za-z0-9_$]/.test(char)) {
-      return /^(return|typeof|case|in|of|void|delete|instanceof|new|do|else|yield|await)$/.test(
+      // `throw` opens an expression, so a regex literal follows it; reading that
+      // slash as division would count the regex body's text as code.
+      return /^(return|throw|typeof|case|in|of|void|delete|instanceof|new|do|else|yield|await)$/.test(
         wordBefore(previous),
       );
     }
@@ -551,8 +553,15 @@ const badgeDefinitions = (skeleton) => [
   ...skeleton.matchAll(/\n\t\tfunction planStatusBadge\(([^)]*)\) \{([\s\S]*?)\n\t\t\}/dg),
 ];
 
+// The live row is a JSX child: its template follows `children: `. A template
+// that carries the same text anywhere else (an assignment, a call argument, a
+// string's contents) is not the row the card renders, so it cannot stand in.
 const badgeRows = (skeleton, templates) =>
-  templates.filter(({ start, end }) => skeleton.slice(start, end).includes("planStatusBadge("));
+  templates.filter(
+    ({ start, end }) =>
+      /\bchildren:\s*$/.test(skeleton.slice(Math.max(0, start - 40), start)) &&
+      skeleton.slice(start, end).includes("planStatusBadge("),
+  );
 
 const compileRow = (code, row) =>
   new Function(
@@ -671,6 +680,29 @@ test("text inside a literal cannot stand in for the badge code", () => {
   const code = withoutComments(decoy);
   const { skeleton, templates } = lexClient(code);
   assert.equal(badgeRows(skeleton, templates).length, 0, "a string's text is not a call site");
+});
+
+test("a regex after throw cannot stand in for the badge row", () => {
+  // `throw` is followed by an expression, so a regex literal may follow it. A
+  // lexer that reads that slash as division keeps the regex body as code, counts
+  // the template inside it as the live row, and leaves a row that badges every
+  // status inline passing.
+  const source = readClientSource();
+  const decoy = source
+    .replace(
+      "${planStatusBadge(t, w)}",
+      '${w?.vendorStatus ? ` · ${t("plan.statusLimited")}` : ""}',
+    )
+    .replace(
+      '\n\t\t\treturn window?.vendorStatus === "rate-limited" ? ` · ${t("plan.statusLimited")}` : "";\n\t\t}',
+      '\n\t\t\treturn window?.vendorStatus === "rate-limited" ? ` · ${t("plan.statusLimited")}` : "";\n\t\t}\n\t\tfunction unusedRegexDecoy() {\n\t\t\tthrow /`plan.usedShort ${livePct}%${planStatusBadge(t, w)}${resetText !== null ? ` · ${t("plan.resetAt")} ${resetText}` : ""}`/;\n\t\t}',
+    );
+  assert.notEqual(decoy, source, "the decoy fixture must differ from client.js");
+  assert.throws(
+    () => badgeCheck(decoy),
+    /the card renders planStatusBadge in exactly one template/,
+    "a regex body's text is not the live row",
+  );
 });
 
 test("a slash-star inside a regex refuses to strip instead of hiding code", () => {

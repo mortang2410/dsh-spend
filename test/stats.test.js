@@ -269,10 +269,24 @@ test("an unfamiliar vendor status rides along without the limited badge", () => 
 });
 
 test("the card shows the limited badge only for the rate-limited word", () => {
-  // The renderer lives in the shipped client bundle, so the gate is pinned
-  // where it is written: the badge must test the exact word, not the presence
-  // of any vendor status.
+  // The renderer lives in the shipped client bundle, which exports nothing, so
+  // the badge is a named helper and this test runs the helper's own body: a
+  // condition that degrades to truthiness fails on behaviour, not on wording.
   const source = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
-  assert.match(source, /w\.vendorStatus === "rate-limited" \?/);
-  assert.doesNotMatch(source, /w\.vendorStatus !== undefined \?/);
+  const definition = source.match(/\n\t\tfunction planStatusBadge\(([^)]*)\) \{([\s\S]*?)\n\t\t\}/);
+  assert.ok(definition, "client.js must define planStatusBadge");
+  const badge = new Function(...definition[1].split(",").map((name) => name.trim()), definition[2]);
+  const t = (key) => key;
+  assert.equal(badge(t, { vendorStatus: "rate-limited" }), " · plan.statusLimited");
+  for (const window of [
+    {},
+    { vendorStatus: undefined },
+    { vendorStatus: null },
+    { vendorStatus: "" },
+    { vendorStatus: "ok" },
+    { vendorStatus: "quota-available" },
+  ]) {
+    assert.equal(badge(t, window), "", `no badge for ${JSON.stringify(window)}`);
+  }
+  assert.match(source, /planStatusBadge\(t, w\)/, "the row must render through the helper");
 });

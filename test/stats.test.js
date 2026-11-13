@@ -268,13 +268,120 @@ test("an unfamiliar vendor status rides along without the limited badge", () => 
   assert.notEqual(usage.windows.week.vendorStatus, "rate-limited");
 });
 
+// The renderer lives in the shipped client bundle, which exports nothing, so the
+// badge is a named helper and these tests run the code itself. Comments are
+// stripped before matching, because a comment carrying a correct-looking helper
+// or row expression would otherwise satisfy a check whose subject is live code.
+function withoutComments(source) {
+  let out = "";
+  let at = 0;
+  const length = source.length;
+
+  function lineComment() {
+    while (at < length && source[at] !== "\n") at++;
+  }
+
+  function blockComment() {
+    out += " ";
+    at += 2;
+    while (at < length && !(source[at] === "*" && source[at + 1] === "/")) {
+      if (source[at] === "\n") out += "\n";
+      at++;
+    }
+    at += 2;
+  }
+
+  function quoted(quote) {
+    out += source[at++];
+    while (at < length) {
+      if (source[at] === "\\") {
+        out += source[at] + (source[at + 1] ?? "");
+        at += 2;
+        continue;
+      }
+      const char = source[at++];
+      out += char;
+      if (char === quote) return;
+    }
+  }
+
+  function template() {
+    out += source[at++];
+    while (at < length) {
+      if (source[at] === "\\") {
+        out += source[at] + (source[at + 1] ?? "");
+        at += 2;
+        continue;
+      }
+      if (source[at] === "`") {
+        out += source[at++];
+        return;
+      }
+      if (source[at] === "$" && source[at + 1] === "{") {
+        out += "${";
+        at += 2;
+        code(true);
+        out += "}";
+        continue;
+      }
+      out += source[at++];
+    }
+  }
+
+  function code(inTemplateExpression) {
+    let depth = 0;
+    while (at < length) {
+      const char = source[at];
+      if (char === "/" && source[at + 1] === "/") {
+        lineComment();
+        continue;
+      }
+      if (char === "/" && source[at + 1] === "*") {
+        blockComment();
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quoted(char);
+        continue;
+      }
+      if (char === "`") {
+        template();
+        continue;
+      }
+      if (inTemplateExpression) {
+        if (char === "{") depth++;
+        else if (char === "}") {
+          if (depth === 0) {
+            at++;
+            return;
+          }
+          depth--;
+        }
+      }
+      out += char;
+      at++;
+    }
+  }
+
+  code(false);
+  return out;
+}
+
+const badgeDefinitions = (code) => [
+  ...code.matchAll(/\n\t\tfunction planStatusBadge\(([^)]*)\) \{([\s\S]*?)\n\t\t\}/g),
+];
+
+const badgeCalls = (code) => [...code.matchAll(/\$\{\s*planStatusBadge\(t, w\)\s*\}/g)];
+
+const readClientCode = () =>
+  withoutComments(readFileSync(new URL("../lib/client.js", import.meta.url), "utf8"));
+
 test("the card shows the limited badge only for the rate-limited word", () => {
-  // The renderer lives in the shipped client bundle, which exports nothing, so
-  // the badge is a named helper and this test runs the helper's own body: a
-  // condition that degrades to truthiness fails on behaviour, not on wording.
-  const source = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
-  const definition = source.match(/\n\t\tfunction planStatusBadge\(([^)]*)\) \{([\s\S]*?)\n\t\t\}/);
-  assert.ok(definition, "client.js must define planStatusBadge");
+  // A condition that degrades to truthiness fails on behaviour, not on wording.
+  const code = readClientCode();
+  const definitions = badgeDefinitions(code);
+  assert.equal(definitions.length, 1, "client.js must define planStatusBadge exactly once");
+  const [definition] = definitions;
   const badge = new Function(...definition[1].split(",").map((name) => name.trim()), definition[2]);
   const t = (key) => key;
   assert.equal(badge(t, { vendorStatus: "rate-limited" }), " · plan.statusLimited");
@@ -288,5 +395,42 @@ test("the card shows the limited badge only for the rate-limited word", () => {
   ]) {
     assert.equal(badge(t, window), "", `no badge for ${JSON.stringify(window)}`);
   }
-  assert.match(source, /planStatusBadge\(t, w\)/, "the row must render through the helper");
+  const calls = badgeCalls(code);
+  assert.equal(calls.length, 1, "the live window row must render through the helper exactly once");
+  const lineStart = code.lastIndexOf("\n", calls[0].index) + 1;
+  const rowLine = code.slice(lineStart, code.indexOf("\n", calls[0].index));
+  assert.match(rowLine, /plan\.usedShort/, "the helper call sits in the live usage row");
+});
+
+test("a comment cannot stand in for the badge code", () => {
+  // The extraction above reads source text, so a comment carrying a correct
+  // helper or row expression must not count as the code that runs. This builds
+  // that decoy: a broad active helper with a correct-looking one commented out
+  // above it, and a row that suffixes the badge inline with the helper call in a
+  // trailing comment.
+  const source = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
+  const decoy = source
+    .replace(
+      '\n\t\tfunction planStatusBadge(t, window) {\n\t\t\treturn window?.vendorStatus === "rate-limited" ? ',
+      '\n\t\t/* function planStatusBadge(t, window) { return window.vendorStatus ? " · decoy" : ""; } */\n\t\tfunction planStatusBadge(t, window) {\n\t\t\treturn window.vendorStatus ? ',
+    )
+    .replace(
+      "${planStatusBadge(t, w)}",
+      '${w.vendorStatus ? ` · ${t("plan.statusLimited")}` : ""} /* planStatusBadge(t, w) */',
+    );
+  assert.notEqual(decoy, source, "the decoy fixture must differ from client.js");
+
+  const code = withoutComments(decoy);
+  const definitions = badgeDefinitions(code);
+  assert.equal(definitions.length, 1, "only the active definition counts");
+  const badge = new Function(
+    ...definitions[0][1].split(",").map((name) => name.trim()),
+    definitions[0][2],
+  );
+  assert.equal(
+    badge((key) => key, { vendorStatus: "quota-available" }),
+    " · plan.statusLimited",
+    "the extracted definition is the active broad one, so the badge test fails on this decoy",
+  );
+  assert.equal(badgeCalls(code).length, 0, "the row's comment must not satisfy the call-site check");
 });

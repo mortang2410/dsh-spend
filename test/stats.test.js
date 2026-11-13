@@ -9,7 +9,7 @@ import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zstdCompressSync } from "node:zlib";
-import { buildStats, computeSignature, scanSessions } from "../lib/stats.js";
+import { buildStats, computeSignature, normalizeProviderUsage, scanSessions } from "../lib/stats.js";
 
 const now = Date.now();
 const Flash = {
@@ -215,4 +215,37 @@ test("session-model rows keep the costliest rows inside the configured cap", () 
   assert.equal(capped.sessionModelTotal, 5);
   // The default cap leaves a small store untouched.
   assert.equal(buildStats(calls, [Flash], {}, {}).bySessionModel.length, 5);
+});
+
+test("a rate-limited vendor window stays on the card with its percent", () => {
+  // OpenCode Go answers `status: "rate-limited"` for a window whose allowance
+  // is spent. The card renders only rows whose status is "ok", so that row
+  // disappeared exactly when it mattered; the row must stay and the vendor's
+  // own word must ride along for display.
+  const usage = normalizeProviderUsage(
+    {
+      usage: {
+        rolling: { status: "ok", percent: 0, resetsAt: "2026-11-13T15:26:46.149Z" },
+        weekly: { status: "rate-limited", percent: 100, resetsAt: "2026-11-16T00:00:00.000Z" },
+        monthly: { status: "ok", percent: 63, resetsAt: "2026-12-07T12:55:20.000Z" },
+      },
+    },
+    "opencode-go",
+  );
+  assert.deepEqual(Object.keys(usage.windows), ["5h", "week", "month"]);
+  assert.deepEqual(usage.windows.week, {
+    status: "ok",
+    percent: 100,
+    vendorStatus: "rate-limited",
+    resetsAt: "2026-11-16T00:00:00.000Z",
+  });
+  assert.equal(usage.windows["5h"].vendorStatus, undefined);
+});
+
+test("a window with no percent keeps its vendor status and no measurement", () => {
+  const usage = normalizeProviderUsage(
+    { usage: { weekly: { status: "error", percent: null } } },
+    "opencode-go",
+  );
+  assert.deepEqual(usage.windows.week, { status: "error", percent: null });
 });

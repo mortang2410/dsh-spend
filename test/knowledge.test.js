@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { discoverPlans, normalizeProvider, PROVIDER_ALIASES } from "../lib/knowledge.js";
+import { discoverPlans, normalizeProvider, providerForModel, PROVIDER_ALIASES } from "../lib/knowledge.js";
 
 test("normalizeProvider maps every declared alias to its canonical id", () => {
   for (const [alias, canonical] of Object.entries(PROVIDER_ALIASES)) {
@@ -88,4 +88,21 @@ test("discoverPlans: opendesign yields the vendor's window caps, not a blank car
   assert.equal(plan.subscription.amount, 10);
   assert.deepEqual(plan.tiers.map((tier) => tier.name), ["Go", "Plus", "Pro", "Max"]);
   assert.equal(autoDiscovered[0].provider, "opendesign");
+});
+test("a DSH route id alone never classifies a call as Meta", () => {
+  // One route can serve several vendors' models, so the route id stays out of
+  // the global alias table; a model under it that names no Meta prefix must not
+  // inherit the Meta plan or its Muse quota adapter.
+  assert.equal(normalizeProvider("bifrost-responses"), "bifrost-responses");
+  const { autoPlans } = discoverPlans(new Set(["bifrost-responses"]));
+  assert.deepEqual(autoPlans, []);
+});
+
+test("a Meta model id resolves to the Meta plan whatever route carried it", () => {
+  assert.equal(providerForModel("meta/ember-mc"), "meta");
+  assert.equal(providerForModel("opendesign/deepseek-eco"), undefined);
+  assert.equal(providerForModel(undefined), undefined);
+  const { autoPlans } = discoverPlans(new Set([providerForModel("meta/ember-mc")]));
+  assert.equal(autoPlans.length, 1);
+  assert.equal(autoPlans[0].provider, "meta");
 });

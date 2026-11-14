@@ -2,11 +2,12 @@
  * Muse Ember adapter tests: the Muse CLI owns the Muse Code login, so the
  * adapter runs `muse usage --json` and reads its stdout instead of opening a
  * credential file or calling the vendor. A signed-out CLI surfaces as
- * NOT_LOGGED_IN and the login is never renewed here.
+ * NOT_LOGGED_IN, the login is never renewed here, the child process gets a
+ * minimal environment, and nothing the CLI prints is copied into an error.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { museUsageFetch, normalizeMuseUsage } from "../lib/providers/quota-muse.js";
+import { museChildEnv, museUsageFetch, normalizeMuseUsage, reasonHint } from "../lib/providers/quota-muse.js";
 
 /** Body shape of `muse usage --json`, trimmed to what the adapter reads. */
 function allowanceBody() {
@@ -24,19 +25,22 @@ function allowanceBody() {
   };
 }
 
-/** Minimal io context: a runner that answers with a canned result. */
-function ioFor(result) {
+/** Minimal io context: a runner that records its arguments and answers canned. */
+function ioFor(result, env = {}) {
   const calls = [];
   return {
     calls,
-    env: {},
+    env,
     home: "/home/tester",
-    run: async (file, args, timeoutMs) => {
-      calls.push({ file, args, timeoutMs });
+    run: async (file, args, timeoutMs, options) => {
+      calls.push({ file, args, timeoutMs, options });
       return typeof result === "function" ? result(file, args) : result;
     },
   };
 }
+
+/** A secret-shaped variable the child must never see. */
+const SENTINEL = "REVIEW_SECRET_SENTINEL_0123456789";
 
 test("a live allowance maps the 5h and weekly windows", async () => {
   const io = ioFor({ code: 0, stdout: JSON.stringify(allowanceBody()) });
@@ -49,6 +53,30 @@ test("a live allowance maps the 5h and weekly windows", async () => {
   assert.equal(usage.meta.plan, "Muse Code Everyday Usage");
 });
 
+test("the child environment is an allowlist, not the plugin's whole env", async () => {
+  const io = ioFor({ code: 0, stdout: JSON.stringify(allowanceBody()) }, {
+    PATH: "/usr/bin:/bin",
+    HOME: "/home/tester",
+    LANG: "C.UTF-8",
+    // Neither of these may reach the subprocess.
+    META_API_KEY: SENTINEL,
+    OPENROUTER_API_KEY: SENTINEL,
+  });
+  await museUsageFetch(io, null);
+  const env = io.calls[0].options?.env;
+  assert.ok(env !== undefined, "the adapter must pass an explicit environment");
+  assert.equal(env.PATH, "/usr/bin:/bin");
+  assert.equal(env.HOME, "/home/tester");
+  assert.equal(env.META_API_KEY, undefined);
+  assert.equal(env.OPENROUTER_API_KEY, undefined);
+  assert.ok(!Object.values(env).includes(SENTINEL));
+});
+
+test("museChildEnv drops empty values and unknown names", () => {
+  assert.deepEqual(museChildEnv({ PATH: "/bin", HOME: "", LEAKY_KEY: "x" }), { PATH: "/bin" });
+  assert.deepEqual(museChildEnv(undefined), {});
+});
+
 test("a signed-out CLI surfaces as NOT_LOGGED_IN without a retry loop", async () => {
   const io = ioFor({ code: 1, stdout: "", stderr: "not signed in" });
   await assert.rejects(() => museUsageFetch(io, null), (error) => {
@@ -59,7 +87,7 @@ test("a signed-out CLI surfaces as NOT_LOGGED_IN without a retry loop", async ()
   assert.equal(io.calls.length, 1);
 });
 
-test("a reply that carries no allowance reports the vendor reason", async () => {
+test("a reply that carries no allowance reports the classified reason", async () => {
   const io = ioFor({ code: 0, stdout: JSON.stringify({ allowance: null, reason: "session expired" }) });
   await assert.rejects(() => museUsageFetch(io, null), (error) => {
     assert.equal(error.code, "NOT_LOGGED_IN");
@@ -68,9 +96,24 @@ test("a reply that carries no allowance reports the vendor reason", async () => 
   });
 });
 
-test("unparseable output is an error, not an empty card", async () => {
-  const io = ioFor({ code: 0, stdout: "Tier: Muse Code Everyday Usage\n" });
-  await assert.rejects(() => museUsageFetch(io, null), /unparseable output/);
+test("a token pasted into the vendor reason never reaches the error", async () => {
+  // The plan card renders the error text, so a credential-looking reason has
+  // to be reduced to its harmless words before it is surfaced.
+  const io = ioFor({ code: 0, stdout: JSON.stringify({ allowance: null, reason: `bad key ${SENTINEL}` }) });
+  await assert.rejects(() => museUsageFetch(io, null), (error) => {
+    assert.ok(!error.message.includes(SENTINEL), "the sentinel leaked into the error message");
+    assert.match(error.message, /no allowance/);
+    return true;
+  });
+});
+
+test("unparseable output is an error that never echoes the bytes", async () => {
+  const io = ioFor({ code: 0, stdout: SENTINEL });
+  await assert.rejects(() => museUsageFetch(io, null), (error) => {
+    assert.match(error.message, /not JSON/);
+    assert.ok(!error.message.includes(SENTINEL), "raw output leaked into the error message");
+    return true;
+  });
 });
 
 test("a missing binary falls through to the next candidate path", async () => {
@@ -95,6 +138,16 @@ test("no candidate binary at all reports the missing CLI", async () => {
     assert.match(error.message, /not found/);
     return true;
   });
+});
+
+test("reasonHint classifies without echoing", () => {
+  assert.equal(reasonHint("session expired"), "session expired");
+  assert.equal(reasonHint("please sign in again"), "not signed in");
+  assert.equal(reasonHint("quota throttled"), "plan limited");
+  assert.equal(reasonHint("something odd"), undefined);
+  assert.equal(reasonHint(undefined), undefined);
+  // A token in the field yields a classification or nothing, never the token.
+  assert.equal(reasonHint("sk-live-" + "a".repeat(40)), undefined);
 });
 
 test("normalizeMuseUsage tolerates a partial payload", () => {

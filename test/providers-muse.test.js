@@ -142,12 +142,24 @@ test("no candidate binary at all reports the missing CLI", async () => {
 
 test("reasonHint classifies without echoing", () => {
   assert.equal(reasonHint("session expired"), "session expired");
+  assert.equal(reasonHint("not signed in"), "not signed in");
   assert.equal(reasonHint("please sign in again"), "not signed in");
+  assert.equal(reasonHint("login required"), "not signed in");
   assert.equal(reasonHint("quota throttled"), "plan limited");
+  assert.equal(reasonHint("token limit exceeded"), "plan limited");
   assert.equal(reasonHint("something odd"), undefined);
   assert.equal(reasonHint(undefined), undefined);
   // A token in the field yields a classification or nothing, never the token.
   assert.equal(reasonHint("sk-live-" + "a".repeat(40)), undefined);
+});
+
+test("a negated or unlimited reason is not reported as a limit", () => {
+  // These describe a healthy plan; calling them a limit would tell the user to
+  // wait or sign in when nothing is wrong.
+  assert.equal(reasonHint("unlimited usage"), undefined);
+  assert.equal(reasonHint("unlimited quota"), undefined);
+  assert.equal(reasonHint("rate limit not exceeded"), undefined);
+  assert.equal(reasonHint("sign in not required"), undefined);
 });
 
 test("normalizeMuseUsage tolerates a partial payload", () => {

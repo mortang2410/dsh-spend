@@ -19,15 +19,25 @@ function ioFor() {
 }
 
 test("the child sees the allowlist and nothing else", async () => {
-  const result = await ioFor().run(
-    process.execPath,
-    ["-e", "process.stdout.write(`${process.env.HOME ? 'home' : 'nohome'}:${process.env.REVIEW_SECRET_SENTINEL ?? 'absent'}`)"],
-    10000,
-    { env: { PATH: process.env.PATH, HOME: process.env.HOME } },
-  );
-  assert.equal(result.code, 0);
-  assert.equal(result.stdout, "home:absent");
-  assert.ok(!result.stdout.includes(SENTINEL));
+  // The sentinel lives in THIS process's environment, which is what a runner
+  // that ignored `options.env` would hand the child. So the test fails if the
+  // forwarding is ever removed, instead of passing on an already-clean env.
+  const previous = process.env.REVIEW_SECRET_SENTINEL;
+  process.env.REVIEW_SECRET_SENTINEL = SENTINEL;
+  try {
+    const result = await ioFor().run(
+      process.execPath,
+      ["-e", "process.stdout.write(`${process.env.HOME ? 'home' : 'nohome'}:${process.env.REVIEW_SECRET_SENTINEL ?? 'absent'}`)"],
+      10000,
+      // PATH only: no HOME, and no sentinel.
+      { env: { PATH: process.env.PATH } },
+    );
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, "nohome:absent", `child env leaked: ${result.stdout}`);
+  } finally {
+    if (previous === undefined) delete process.env.REVIEW_SECRET_SENTINEL;
+    else process.env.REVIEW_SECRET_SENTINEL = previous;
+  }
 });
 
 test("stdout is captured and a non-zero exit reports its code", async () => {

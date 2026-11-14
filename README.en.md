@@ -68,6 +68,7 @@ The plugin ships a built-in **provider knowledge base** (`lib/knowledge.js`, ver
 |---|---|---|---|
 | OpenCode Go (`opencode-go`) | $10/mo | — | **Live quota** (`GET /zen/go/v1/usage`: actual rolling-5h/week/month percent + reset, read through the Bifrost gateway's captured request, so the plugin holds no key); falls back to the $60-limit model caps (5h $12 / week $30 / month $60, ~79,050 req/wk for V4 Flash) when no captured body is available |
 | OpenAI Codex (`openai-codex`) | Plus $20/mo | Plus / Pro 5x $100 / Pro 20x $200 / Business | **Live quota** (`chatgpt.com/backend-api/wham/usage`; needs `~/.codex/auth.json` login on this machine; falls back to ~100 req/wk) |
+| Muse Ember (`meta`) | Everyday Usage $5/mo | — | **Live quota, no credential in the plugin** (this machine's `muse` CLI: `muse usage --json` reports the rolling 5h and weekly windows as percent used plus reset time, with the tier name). The CLI owns the Muse Code login; the adapter only reads its output, never opens a credential file and never refreshes the login. Falls back to 50 req/5h when the CLI is signed out or missing |
 | GitHub Copilot (`github-copilot`) | Pro $10/mo | Free / Pro / Pro+ $39 / Max $100 / Business / Enterprise | **Live quota** (`api.github.com/copilot_internal/user`; needs `GH_TOKEN`/`GITHUB_TOKEN` or `gh auth login`; falls back to AI Credits $15/mo) |
 | Claude Code (`claude-sub`) | Pro $20/mo | Pro / Max 5x $100 / Max 20x $200 | **Live quota** (`api.anthropic.com/api/oauth/usage`; needs `~/.claude/.credentials.json` login on this machine; falls back to the tier table). The endpoint throttles hard, so the adapter asks at most once per 5 minutes and replays the last payload on HTTP 429 |
 | ZhipuAI Coding Plan (`zhipu`) | official plan | — | **Live quota** (official `bigmodel.cn/api/monitor/usage/quota/limit`: 5h/week percent + reset, MCP monthly counts; credential seam `ZHIPU_API_KEY`; international site z.ai via a `usageEndpoints` URL override) |
@@ -102,7 +103,7 @@ The same route table claims OpenDesign's two routes (`opendesign/deepseek-opende
 
 Built-in adapters (`lib/providers/`, endpoints & auth verified 2026-08-25):
 
-- **Quota** (subscription Code plans): OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / ZhipuAI Coding Plan / MiniMax Token Plan / ClinePass / Command Code — the plan card shows **the vendor's own reported values**: actual percent used per window (5h / week / month) plus the reset time, plus vendor-specific shares (Codex code review, Claude Opus/Design weekly windows, Copilot Premium/Chat snapshots, Zhipu MCP monthly counts);
+- **Quota** (subscription Code plans): OpenCode Go / OpenAI Codex / Muse Ember / Claude Code / GitHub Copilot / ZhipuAI Coding Plan / MiniMax Token Plan / ClinePass / Command Code — the plan card shows **the vendor's own reported values**: actual percent used per window (5h / week / month) plus the reset time, plus vendor-specific shares (Codex code review, Claude Opus/Design weekly windows, Copilot Premium/Chat snapshots, Zhipu MCP monthly counts);
 - **Balance** (Token plans): DeepSeek / Moonshot — **real account balance** (wallet available + top-up/granted split, converted automatically with the $/¥ switch).
 
 Credentials are reused read-only from local CLI logins and the credentials seam:
@@ -112,6 +113,7 @@ Credentials are reused read-only from local CLI logins and the credentials seam:
 | OpenCode Go | none in the plugin: Bifrost holds the key and `scripts/opencode-go-usage.py` reads the captured usage payload |
 | DeepSeek / Zhipu / MiniMax / ClinePass / Moonshot | env or credentials seam: `DEEPSEEK_API_KEY` / `ZHIPU_API_KEY` / `MINIMAX_API_KEY` (fallback `MINIMAX_CN_API_KEY`) / `CLINEPASS_API_KEY` / `MOONSHOT_API_KEY` |
 | OpenAI Codex | local `~/.codex/auth.json` login |
+| Muse Ember | none inside the plugin: the local `muse` CLI owns the Muse Code login and the adapter only runs `muse usage --json` |
 | Claude Code | local `~/.claude/.credentials.json` login |
 | GitHub Copilot | `GH_TOKEN` / `GITHUB_TOKEN` / `gh` config |
 | Command Code | none in the plugin: Bifrost holds the key and `scripts/commandcode-usage.py` reads the captured usage payload |

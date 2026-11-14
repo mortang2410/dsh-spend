@@ -70,6 +70,7 @@
 |---|---|---|---|
 | OpenCode Go（`opencode-go`） | $10/月 | — | **实时额度，插件内无任何凭据**（`GET /zen/go/v1/usage`：滚动 5h/周/月 实际已用百分比 + 重置时间）：Bifrost 用专用 `opencode-go-billing` provider 块以自己的密钥抓取，`scripts/opencode-go-usage.py` 再从请求日志取出载荷；取不到时回退按 $60 月度上限模型的美元额度（5h $12 / 周 $30 / 月 $60，V4 Flash 约 79,050 请求/周） |
 | OpenAI Codex（`openai-codex`） | Plus $20/月 | Plus / Pro 5x $100 / Pro 20x $200 / Business | **实时额度**（`chatgpt.com/backend-api/wham/usage`，需本机 `~/.codex/auth.json` 登录态；未登录回退 ~100 请求/周） |
+| Muse Ember（`meta`） | Everyday Usage $5/月 | — | **实时额度，插件内无任何凭据**（本机 `muse` CLI 的 `muse usage --json`：滚动 5h 与周窗口的已用百分比 + 重置时间，另带 tier 名称）。Muse Code 的登录归 CLI 所有，适配器只读它的输出，不打开凭据文件、不刷新登录；未登录或 CLI 缺失时回退 50 请求/5h 的档位表 |
 | GitHub Copilot（`github-copilot`） | Pro $10/月 | Free / Pro / Pro+ $39 / Max $100 / Business / Enterprise | **实时额度**（`api.github.com/copilot_internal/user`，需 `GH_TOKEN`/`GITHUB_TOKEN` 或 `gh auth login`；未登录回退 AI Credits 月 $15） |
 | Claude Code（`claude-sub`） | Pro $20/月 | Pro / Max 5x $100 / Max 20x $200 | **实时额度**（`api.anthropic.com/api/oauth/usage`，需本机 `~/.claude/.credentials.json` 登录态；未登录回退档位表 5h 1x/5x/20x）。该接口限流很紧，适配器最多每 5 分钟请求一次，遇到 HTTP 429 直接返回上一次的载荷 |
 | 智谱 Coding Plan（`zhipu`） | 官方套餐 | — | **实时额度**（官方 `bigmodel.cn/api/monitor/usage/quota/limit`：5h/周 已用百分比 + 重置时间、MCP 月度次数；凭据缝 `ZHIPU_API_KEY`；国际站 z.ai 可用 `usageEndpoints` 换 URL） |
@@ -104,7 +105,7 @@
 
 内置适配器（`lib/providers/`，端点与鉴权 2026-08-25 核实）：
 
-- **额度类**（订阅制 Code 计划）：OpenCode Go / OpenAI Codex / Claude Code / GitHub Copilot / 智谱 Coding Plan / MiniMax Token Plan / ClinePass / Command Code —— 卡片直接展示**订阅商接口返回的额度值**：每个窗口 5h/周/月的**实际已用百分比**与**重置时间**，另附供应商特有额度（Codex 代码评审、Claude Opus/Design 周窗口、Copilot Premium/Chat 快照、智谱 MCP 月度次数）；
+- **额度类**（订阅制 Code 计划）：OpenCode Go / OpenAI Codex / Muse Ember / Claude Code / GitHub Copilot / 智谱 Coding Plan / MiniMax Token Plan / ClinePass / Command Code —— 卡片直接展示**订阅商接口返回的额度值**：每个窗口 5h/周/月的**实际已用百分比**与**重置时间**，另附供应商特有额度（Codex 代码评审、Claude Opus/Design 周窗口、Copilot Premium/Chat 快照、智谱 MCP 月度次数）；
 - **余额类**（按量 Token 计划）：DeepSeek / Moonshot —— 展示**真实账户余额**（钱包可用余额 + 充值/赠金拆分，随 $/¥ 切换自动换算）。
 
 凭据**只读**复用本机登录态与凭据缝：
@@ -115,6 +116,7 @@
 | DeepSeek / 智谱 / MiniMax / ClinePass / Moonshot | 环境变量或凭据缝：`DEEPSEEK_API_KEY` / `ZHIPU_API_KEY` / `MINIMAX_API_KEY`（兜底 `MINIMAX_CN_API_KEY`） / `CLINEPASS_API_KEY` / `MOONSHOT_API_KEY` |
 | OpenAI Codex | 本机 `~/.codex/auth.json` 登录态 |
 | Claude Code | 本机 `~/.claude/.credentials.json` 登录态 |
+| Muse Ember | 插件内无：本机 `muse` CLI 自己持有 Muse Code 登录，适配器只运行 `muse usage --json` 读输出 |
 | GitHub Copilot | `GH_TOKEN` / `GITHUB_TOKEN` / `gh` 配置 |
 | Command Code | 插件内无：密钥在 Bifrost，`scripts/commandcode-usage.py` 读取已抓取的用量载荷 |
 
@@ -259,6 +261,7 @@ dsh-spend/
 │   │   ├── quota-zhipu.js        # 智谱 Coding Plan 实时额度（官方端点）
 │   │   ├── quota-minimax.js      # MiniMax Token Plan 实时额度（官方端点）
 │   │   ├── quota-clinepass.js    # ClinePass 实时额度（官方端点）
+│   │   ├── quota-muse.js         # Muse Ember 额度（运行 muse CLI，无凭据）
 │   │   ├── quota-commandcode.js  # Command Code 额度（从 Bifrost 日志复制，无凭据）
 │   │   ├── balance-deepseek.js   # DeepSeek 账户余额（官方端点）
 │   │   └── balance-moonshot.js   # Moonshot 账户余额（官方端点）
